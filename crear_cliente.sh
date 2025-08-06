@@ -1,74 +1,63 @@
+# crear_cliente.sh
+
 #!/bin/bash
 
-# ✅ Francho Wire Bot - Script para crear cliente WireGuard
-# Guarda configuraciones en: /home/ubuntu/FranchoWireBot/clientes/
+# ===============================
+# 📄 Script para crear cliente WireGuard
+# ===============================
 
-# CONFIGURACIÓN DEL SERVIDOR
-WG_INTERFACE="wg0"
-WG_DIR="/etc/wireguard"
-WG_CONF="$WG_DIR/$WG_INTERFACE.conf"
-SERVER_PUBLIC_IP="3.145.41.118"
-SERVER_PORT="51820"
-WG_SUBNET="10.9.0"
-WG_CIDR="/32"
-DNS_SERVER="1.1.1.1"
-
-# DIRECTORIO DESTINO PARA ARCHIVOS DE CLIENTES
-OUTPUT_DIR="/home/ubuntu/FranchoWireBot/clientes"
-mkdir -p "$OUTPUT_DIR"
-
-# COMPROBAR PARÁMETRO
+# Nombre del cliente (pasado como argumento)
 CLIENT_NAME="$1"
+
+# Rutas
+WG_DIR="/etc/wireguard"
+SERVER_PUBLIC_KEY_PATH="$WG_DIR/server_public.key"  # ← Corregido
+SERVER_IP="your.public.ip.address"  # Reemplaza esto con tu IP pública
+CLIENTS_DIR="/home/ubuntu/francho_wire/clientes"
+CONF_DIR="$CLIENTS_DIR"
+QR_DIR="$CLIENTS_DIR"
+WG_PORT="51820"
+WG_INTERFACE="wg0"
+
+# Verificaciones iniciales
 if [ -z "$CLIENT_NAME" ]; then
   echo "❌ Debes indicar un nombre para el cliente."
-  echo "Ejemplo: sudo bash crear_cliente.sh cliente1"
   exit 1
 fi
 
-# GENERAR CLAVES DEL CLIENTE
+if [ ! -f "$SERVER_PUBLIC_KEY_PATH" ]; then
+  echo "❌ No se encontró la clave pública del servidor en $SERVER_PUBLIC_KEY_PATH"
+  exit 1
+fi
+
+mkdir -p "$CLIENTS_DIR"
+
+# Generar claves del cliente
 CLIENT_PRIVATE_KEY=$(wg genkey)
 CLIENT_PUBLIC_KEY=$(echo "$CLIENT_PRIVATE_KEY" | wg pubkey)
+CLIENT_IP="10.9.0.$((RANDOM % 200 + 2))/32"
 
-# OBTENER PRÓXIMA IP DISPONIBLE
-IP_LAST=$(grep -oP "${WG_SUBNET}\.\K[0-9]{1,3}" "$WG_CONF" | sort -n | tail -n1)
-if [ -z "$IP_LAST" ]; then
-  IP_LAST=1
-fi
-NEXT_IP=$((IP_LAST + 1))
-CLIENT_IP="$WG_SUBNET.$NEXT_IP$WG_CIDR"
+# Leer clave pública del servidor
+SERVER_PUBLIC_KEY=$(cat "$SERVER_PUBLIC_KEY_PATH")
 
-# AGREGAR PEER AL SERVIDOR
-echo -e "\n# $CLIENT_NAME" >> "$WG_CONF"
-echo "[Peer]" >> "$WG_CONF"
-echo "PublicKey = $CLIENT_PUBLIC_KEY" >> "$WG_CONF"
-echo "AllowedIPs = $WG_SUBNET.$NEXT_IP$WG_CIDR" >> "$WG_CONF"
-echo "PersistentKeepalive = 25" >> "$WG_CONF"
-
-# GENERAR ARCHIVO DEL CLIENTE
-CLIENT_CONF="$OUTPUT_DIR/${CLIENT_NAME}.conf"
-cat > "$CLIENT_CONF" <<EOF
+# Crear archivo de configuración
+CONFIG_FILE="$CONF_DIR/$CLIENT_NAME.conf"
+cat > "$CONFIG_FILE" <<EOF
 [Interface]
 PrivateKey = $CLIENT_PRIVATE_KEY
 Address = $CLIENT_IP
-DNS = $DNS_SERVER
+DNS = 1.1.1.1
 
 [Peer]
-PublicKey = $(wg show $WG_INTERFACE public-key)
-Endpoint = $SERVER_PUBLIC_IP:$SERVER_PORT
+PublicKey = $SERVER_PUBLIC_KEY
+Endpoint = $SERVER_IP:$WG_PORT
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 EOF
 
-# CAMBIAR PERMISOS DE SEGURIDAD
-chmod 600 "$CLIENT_CONF"
+# Generar QR
+qrencode -o "$QR_DIR/$CLIENT_NAME.png" -t png < "$CONFIG_FILE"
 
-# REINICIAR WIREGUARD
-systemctl restart wg-quick@$WG_INTERFACE
-
-# GENERAR CÓDIGO QR
-qrencode -o "$OUTPUT_DIR/${CLIENT_NAME}.png" < "$CLIENT_CONF"
-
-# MOSTRAR RESULTADO
-echo -e "\n✅ Cliente creado: $CLIENT_NAME"
-echo "📄 Archivo: $CLIENT_CONF"
-echo "📸 QR: $OUTPUT_DIR/${CLIENT_NAME}.png"
+echo "✅ Cliente $CLIENT_NAME creado correctamente."
+echo "📄 Archivo: $CONFIG_FILE"
+echo "🖼️ QR: $QR_DIR/$CLIENT_NAME.png"
