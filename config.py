@@ -11,3 +11,6 @@ SCRIPT_PATH = '/home/ubuntu/FranchoWireBot/crear_cliente.sh'  # ✅ Corregido
 
 # Carpeta donde se guardan los archivos generados por el script
 CLIENTS_DIR = '/home/ubuntu/francho_wire/clientes'
+
+# IP pública del servidor (para que el script use esta IP en los archivos .conf)
+SERVER_PUBLIC_IP = '3.145.41.118'
