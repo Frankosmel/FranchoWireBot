@@ -6,7 +6,8 @@ from config import ADMIN_ID, CLIENTES_DIR, PLANES
 from utils import generar_qr_desde_conf, calcular_vencimiento, ruta_conf_cliente
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
+import subprocess
 
 # Diccionario para controlar el flujo de creación
 CREACION = {}
@@ -57,7 +58,7 @@ def manejar_respuesta_creacion(bot: TeleBot, message):
 
         # Mostrar opciones de planes
         kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        for plan in PLANES.keys():
+        for plan in PLANES:
             kb.add(KeyboardButton(plan))
         kb.add(KeyboardButton("🔙 Volver"))
         return bot.send_message(chat_id, "📦 Selecciona un *plan de duración* para este cliente:", reply_markup=kb, parse_mode="Markdown")
@@ -69,8 +70,12 @@ def manejar_respuesta_creacion(bot: TeleBot, message):
 
         # Ejecutar script externo
         nombre = CREACION[chat_id]["nombre"]
-        ruta_script = os.path.abspath("crear_cliente.sh")
-        os.system(f"sudo bash {ruta_script} {nombre}")
+        ruta_script = "/home/ubuntu/FranchoWireBot/crear_cliente.sh"
+
+        try:
+            subprocess.run(["sudo", "bash", ruta_script, nombre], check=True)
+        except subprocess.CalledProcessError:
+            return bot.send_message(chat_id, "❌ Error al ejecutar el script de creación.")
 
         ruta_archivo = ruta_conf_cliente(nombre)
         if not os.path.exists(ruta_archivo):
