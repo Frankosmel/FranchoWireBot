@@ -1,30 +1,31 @@
 # config.py
 
-# Token del bot
+# — Bot —
 BOT_TOKEN = '8334285648:AAFui_V95j-RgnTtkYQO_-SdgYCUjX6oBo4'
+ADMIN_ID   = 1383931339  # Tu ID de Telegram
 
-# ID del administrador autorizado
-ADMIN_ID = 1383931339  # Cámbialo si deseas otro ID
+# — Rutas —
+SCRIPT_PATH    = '/home/ubuntu/FranchoWireBot/crear_cliente.sh'    # ruta al script bash
+CLIENTS_DIR    = '/home/ubuntu/francho_wire/clientes'             # donde se guardan .conf y .png
+CLIENTES_DIR   = CLIENTS_DIR                                      # alias español (para import en admin_handlers)
 
-# Lista de planes disponibles y sus duraciones
-# Las claves deben coincidir con los botones que muestras en el menú
-PLANS = {
-    "Free (5 horas)": {"hours": 5},
-    "15 días":        {"days": 15},
-    "30 días":        {"days": 30},
+# — WireGuard servidor —
+WG_INTERFACE        = 'wg0'
+WG_CONFIG_DIR       = f'/etc/wireguard/configs'                   # donde guarda wg-quick sus .conf
+WG_PORT             = 51820
+SERVER_PUBLIC_IP    = '3.145.41.118'
+SERVER_PUBLIC_KEY   = '/etc/wireguard/server_public.key'          # ruta a tu clave pública
+SERVER_ENDPOINT     = f'{SERVER_PUBLIC_IP}:{WG_PORT}'
+WG_NETWORK_RANGE    = '0.0.0.0/0'
+
+# — Planes de cliente —
+PLANES_PRECIOS = {
+    "Free (5 horas)": {"horas": 5},
+    "15 días":        {"dias": 15},
+    "30 días":        {"dias": 30},
 }
+PLANES = list(PLANES_PRECIOS.keys())
+PLANS  = PLANES  # alias para quienes importen PLANS
 
-# Ruta al script bash que crea el cliente WireGuard
-SCRIPT_PATH = '/home/ubuntu/FranchoWireBot/crear_cliente.sh'
-
-# Directorio donde se almacenan las configuraciones y QR generados (.conf + .png)
-CLIENTS_DIR = '/home/ubuntu/francho_wire/clientes'
-
-# IP pública del servidor (para el campo Endpoint de los .conf)
-SERVER_PUBLIC_IP = '3.145.41.118'
-
-# Parámetros de WireGuard (usados en utils.py / generator.py)
-WG_INTERFACE      = 'wg0'
-WG_PORT           = 51820
-WG_CONFIG_DIR     = '/etc/wireguard/configs'
-WG_NETWORK_RANGE  = '0.0.0.0/0'
+# — Logs y demás (opcional) —
+GRUPO_LOGS = None
