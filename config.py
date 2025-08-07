@@ -1,31 +1,46 @@
-# config.py
+config.py
 
-# Token del bot
+Token del bot (reemplázalo con tu token real)
+
 BOT_TOKEN = '8334285648:AAFui_V95j-RgnTtkYQO_-SdgYCUjX6oBo4'
 
-# ID del administrador autorizado
-ADMIN_ID = 1383931339
+ID del administrador autorizado (solo este accede al bot)
 
-# Ruta al script bash que crea la config de cada cliente
+ADMIN_ID = 1383931339  # Reemplaza por tu ID si cambia
+
+Ruta correcta al script bash para crear clientes
+
 SCRIPT_PATH = '/home/ubuntu/FranchoWireBot/crear_cliente.sh'
 
-# Carpeta donde el script deja los .conf y los QR
+Carpeta donde se guardan los archivos generados por el script
+
 CLIENTS_DIR = '/home/ubuntu/francho_wire/clientes'
 
-# IP pública de tu VPS (para el Endpoint en los archivos .conf)
+Clave pública del servidor WireGuard (para crear .conf)
+
+SERVER_PUBLIC_KEY = 'QLtoHUIcW2s/ZZ3tgKZ3wSidEy778prOGWIGo2cXhHw='
+
+IP pública del servidor WireGuard (Endpoint)
+
 SERVER_PUBLIC_IP = '3.145.41.118'
 
-# Puerto de WireGuard en el servidor
-SERVER_PORT = '51820'
+Puerto de escucha del servidor WireGuard (por defecto 51820)
 
-# Rango de IPs internas para asignar dinámicamente a los clientes
-IP_RANGO_INICIO = '10.9.0.2'
-IP_RANGO_FIN    = '10.9.0.254'
+LISTEN_PORT = 51820 WG_PORT = LISTEN_PORT
 
-# Planes disponibles y su duración
-# Las claves deben coincidir con los botones que muestras en el bot
-PLANS = {
-    "Free (5 horas)": {"hours": 5},
-    "15 días":         {"days": 15},
-    "30 días":         {"days": 30},
-}
+Rango permitido de IPs para clientes (AllowedIPs)
+
+WG_NETWORK_RANGE = '0.0.0.0/0'
+
+Carpeta donde se mantienen las configuraciones activas del servidor
+
+WG_CONFIG_DIR = '/etc/wireguard/configs'
+
+Endpoint completo para el .conf de cliente
+
+SERVER_ENDPOINT = f'{SERVER_PUBLIC_IP}:{WG_PORT}'
+
+Planes disponibles y su duración (para menús y cálculos de vencimiento)
+
+PLANS = { 'Free (5 horas)': {'horas': 5}, '15 días': {'dias': 15}, '30 días': {'dias': 30} }
+
