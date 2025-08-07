@@ -2,37 +2,58 @@
 
 import os
 import subprocess
+import json
 from datetime import datetime
 from config import SCRIPT_PATH, CLIENTS_DIR
-from utils import ruta_conf_cliente, generar_qr_desde_conf
+from utils import ruta_conf_cliente, ruta_qr_cliente, generate_qr
+
+# Ruta al JSON que guarda metadatos de todas las configuraciones
+CONFIGS_FILE = os.path.join(CLIENTS_DIR, 'configuraciones.json')
 
 def create_config(cliente: str, vencimiento: datetime):
     """
-    Ejecuta el script de creación de cliente, devuelve una tupla:
-    (success: bool, path_conf: str or error_msg: str, path_qr: str or None)
+    Ejecuta el script de creación de cliente, genera el .conf y el .png, 
+    registra la nueva configuración en configuraciones.json, y devuelve:
+      (True, ruta_conf, ruta_qr)
+    o en caso de error:
+      (False, mensaje_error, None)
     """
-    # Invocamos el script bash
+    # 1️⃣ Ejecutar el script bash
     result = subprocess.run(
         ["sudo", "bash", SCRIPT_PATH, cliente],
         capture_output=True,
         text=True
     )
-
     if result.returncode != 0:
-        # error.stderr contiene el mensaje de fallo
         return False, result.stderr.strip(), None
 
-    # Ubicaciones esperadas
-    conf_path = os.path.join(CLIENTS_DIR, f"{cliente}.conf")
-    qr_path   = os.path.join(CLIENTS_DIR, f"{cliente}.png")
+    # 2️⃣ Rutas esperadas
+    conf_path = ruta_conf_cliente(cliente)
+    qr_path   = ruta_qr_cliente(cliente)
 
-    # Verificamos que existan
-    if not os.path.isfile(conf_path):
-        return False, f"No se encontró {conf_path}", None
+    # 3️⃣ Generar QR si no existe
     if not os.path.isfile(qr_path):
-        # si quieres puedes generar el QR aquí mismo
-        # qr = generar_qr_desde_conf(conf_path)
-        # with open(qr_path, "wb") as f: f.write(qr.read())
-        return False, f"No se encontró {qr_path}", None
+        try:
+            generate_qr(conf_path)
+        except Exception as e:
+            return False, f"Error al generar QR: {e}", None
 
+    # 4️⃣ Registrar en configuraciones.json
+    datos = {}
+    if os.path.isfile(CONFIGS_FILE):
+        with open(CONFIGS_FILE, 'r') as f:
+            try:
+                datos = json.load(f)
+            except json.JSONDecodeError:
+                datos = {}
+
+    datos[cliente] = {
+        "vencimiento": vencimiento.strftime("%Y-%m-%d %H:%M"),
+        "activa": True
+    }
+
+    with open(CONFIGS_FILE, 'w') as f:
+        json.dump(datos, f, indent=2)
+
+    # 5️⃣ Devolver éxito y rutas
     return True, conf_path, qr_path
