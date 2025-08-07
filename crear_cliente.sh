@@ -11,8 +11,8 @@ CLIENT_NAME="$1"
 
 # Rutas
 WG_DIR="/etc/wireguard"
-SERVER_PUBLIC_KEY_PATH="$WG_DIR/server_public.key"  # ← Corregido
-SERVER_IP="3.145.41.118"  # Reemplaza esto con tu IP pública
+SERVER_PUBLIC_KEY_PATH="$WG_DIR/server_public.key"
+SERVER_IP="3.145.41.118"  # ← Asegúrate de que sea tu IP pública real
 CLIENTS_DIR="/home/ubuntu/francho_wire/clientes"
 CONF_DIR="$CLIENTS_DIR"
 QR_DIR="$CLIENTS_DIR"
@@ -58,6 +58,15 @@ EOF
 # Generar QR
 qrencode -o "$QR_DIR/$CLIENT_NAME.png" -t png < "$CONFIG_FILE"
 
+# ✅ Agregar al servidor como peer
+echo -e "\n[Peer]
+PublicKey = $CLIENT_PUBLIC_KEY
+AllowedIPs = ${CLIENT_IP}" | sudo tee -a "$WG_DIR/$WG_INTERFACE.conf" > /dev/null
+
+# 🔄 Recargar configuración sin reiniciar servicio
+sudo wg addconf $WG_INTERFACE <(wg-quick strip $WG_INTERFACE)
+
+# Confirmación
 echo "✅ Cliente $CLIENT_NAME creado correctamente."
 echo "📄 Archivo: $CONFIG_FILE"
 echo "🖼️ QR: $QR_DIR/$CLIENT_NAME.png"
