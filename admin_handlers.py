@@ -64,8 +64,12 @@ def register_admin_handlers(bot: TeleBot):
 
     @bot.message_handler(func=lambda m: m.text == '🛠 Gestionar configuraciones')
     def handle_gestionar(message):
-        bot.send_message(message.chat.id, "🔧 *Gestión de Configuraciones*\nElige una acción:", 
-                         parse_mode="Markdown", reply_markup=gestion_menu())
+        bot.send_message(
+            message.chat.id,
+            "🔧 *Gestión de Configuraciones*\nElige una acción:",
+            parse_mode="Markdown",
+            reply_markup=gestion_menu()
+        )
 
     @bot.message_handler(func=lambda m: m.text == '📊 Estadísticas')
     def handle_stats(message):
@@ -81,8 +85,12 @@ def register_admin_handlers(bot: TeleBot):
 
     @bot.message_handler(func=lambda m: m.text == '➕ Crear configuración')
     def iniciar_creacion(message):
-        bot.send_message(message.chat.id, "✍️ *Escribe el nombre del cliente*:", 
-                         parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+        bot.send_message(
+            message.chat.id,
+            "✍️ *Escribe el nombre del cliente*:",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove()
+        )
         bot.register_next_step_handler(message, solicitar_plan)
 
     def solicitar_plan(message):
@@ -92,27 +100,41 @@ def register_admin_handlers(bot: TeleBot):
         for plan in PLANS:
             kb.add(KeyboardButton(plan))
         kb.add(KeyboardButton('🔙 Volver'))
-        bot.send_message(message.chat.id, "📦 *Selecciona un plan de duración*:", 
-                         parse_mode="Markdown", reply_markup=kb)
+        bot.send_message(
+            message.chat.id,
+            "📦 *Selecciona un plan de duración*:",
+            parse_mode="Markdown",
+            reply_markup=kb
+        )
         bot.register_next_step_handler(message, confirmar_creacion)
 
     def confirmar_creacion(message):
         if message.text == '🔙 Volver':
             TEMP.pop(message.chat.id, None)
-            return bot.send_message(message.chat.id, "↩️ Regresando al menú principal.", 
-                                     reply_markup=admin_menu())
+            return bot.send_message(
+                message.chat.id,
+                "↩️ Regresando al menú principal.",
+                reply_markup=admin_menu()
+            )
         data = TEMP.get(message.chat.id, {})
         cliente = data.get('cliente')
         plan = message.text
         if plan not in PLANS:
-            return bot.send_message(message.chat.id, "❌ Plan inválido, intenta de nuevo.", 
-                                    reply_markup=admin_menu())
+            return bot.send_message(
+                message.chat.id,
+                "❌ Plan inválido, intenta de nuevo.",
+                reply_markup=admin_menu()
+            )
         # calculate expiration
         delta = PLANS[plan]
         venc = datetime.now() + timedelta(**delta)
         success, conf_path, qr_path = create_config(cliente, venc)
         if not success:
-            return bot.send_message(message.chat.id, f"❌ Error: {conf_path}", reply_markup=admin_menu())
+            return bot.send_message(
+                message.chat.id,
+                f"❌ Error: {conf_path}",
+                reply_markup=admin_menu()
+            )
         caption = (
             f"✅ *{cliente}* creado.\n"
             f"📅 Vence el: *{venc.strftime('%d/%m/%Y %H:%M')}*"
@@ -155,8 +177,11 @@ def register_admin_handlers(bot: TeleBot):
 
     @bot.message_handler(func=lambda m: m.text == '📁 Ver QR')
     def ver_qr(message):
-        bot.send_message(message.chat.id, "✏️ *Nombre del cliente* para ver QR:", 
-                         parse_mode="Markdown")
+        bot.send_message(
+            message.chat.id,
+            "✏️ *Nombre del cliente* para ver QR:",
+            parse_mode="Markdown"
+        )
         bot.register_next_step_handler(message, enviar_qr)
 
     def enviar_qr(message):
@@ -169,7 +194,11 @@ def register_admin_handlers(bot: TeleBot):
 
     @bot.message_handler(func=lambda m: m.text == '📄 Descargar .conf')
     def ver_conf(message):
-        bot.send_message(message.chat.id, "✏️ *Nombre del cliente* para .conf:", parse_mode="Markdown")
+        bot.send_message(
+            message.chat.id,
+            "✏️ *Nombre del cliente* para .conf:",
+            parse_mode="Markdown"
+        )
         bot.register_next_step_handler(message, enviar_conf)
 
     def enviar_conf(message):
@@ -182,20 +211,32 @@ def register_admin_handlers(bot: TeleBot):
 
     @bot.message_handler(func=lambda m: m.text == '♻️ Renovar')
     def renovar(message):
-        bot.send_message(message.chat.id, "✏️ *Nombre del cliente* a renovar:", parse_mode="Markdown")
+        bot.send_message(
+            message.chat.id,
+            "✏️ *Nombre del cliente* a renovar:",
+            parse_mode="Markdown"
+        )
         bot.register_next_step_handler(message, ejecutar_renovacion)
 
     def ejecutar_renovacion(message):
         cliente = message.text.strip()
         exito, nuevo = renew_config(cliente)
         if exito:
-            bot.send_message(message.chat.id, f"♻️ *{cliente}* renovado hasta {nuevo.strftime('%d/%m/%Y')}", parse_mode="Markdown")
+            bot.send_message(
+                message.chat.id,
+                f"♻️ *{cliente}* renovado hasta {nuevo.strftime('%d/%m/%Y')}",
+                parse_mode="Markdown"
+            )
         else:
             bot.send_message(message.chat.id, "❌ No se pudo renovar. Verifica el nombre.")
 
     @bot.message_handler(func=lambda m: m.text == '❌ Eliminar')
     def eliminar(message):
-        bot.send_message(message.chat.id, "✏️ *Nombre del cliente* a eliminar:", parse_mode="Markdown")
+        bot.send_message(
+            message.chat.id,
+            "✏️ *Nombre del cliente* a eliminar:",
+            parse_mode="Markdown"
+        )
         bot.register_next_step_handler(message, ejecutar_eliminacion)
 
     def ejecutar_eliminacion(message):
@@ -204,3 +245,4 @@ def register_admin_handlers(bot: TeleBot):
             bot.send_message(message.chat.id, f"🗑️ *{cliente}* eliminado.", parse_mode="Markdown")
         else:
             bot.send_message(message.chat.id, "❌ No se pudo eliminar. Verifica el nombre.")
+```0
