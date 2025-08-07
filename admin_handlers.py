@@ -287,15 +287,3 @@ def register_admin_handlers(bot: TeleBot):
                 bot.send_document(message.chat.id, f, caption=f"📄 *{cliente}*", parse_mode="Markdown")
         else:
             bot.send_message(message.chat.id, "❌ .conf no encontrado.", reply_markup=admin_menu())
-
-Qué hace este cambio
-
-Ahora CONFIGS_FILE es un JSON dentro de la carpeta CLIENTS_DIR, por lo que carga y guarda ahí las configuraciones.
-
-En los flujos de Renovar, Eliminar, Ver QR y Descargar .conf, en lugar de pedir texto libre, el bot te muestra un teclado con los nombres de cliente disponibles y un botón de “🔙 Menú admin”.
-
-Asegúrate de que exista el archivo JSON (puedes crearlo vacío con {}) y de que storage.load_json y storage.save_json usen la misma ruta.
-
-
-Con esto, al pulsar “🛠 Gestionar configuraciones” y luego “♻️ Renovar” (o cualquier otra acción), verás directamente los clientes disponibles como botones.
-
