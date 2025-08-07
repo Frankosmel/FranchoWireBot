@@ -1,32 +1,31 @@
 # config.py
 
-# — Bot —
+# Token del bot
 BOT_TOKEN = '8334285648:AAFui_V95j-RgnTtkYQO_-SdgYCUjX6oBo4'
-ADMIN_ID   = 1383931339  # Tu ID de Telegram
 
-# — Rutas —
-SCRIPT_PATH    = '/home/ubuntu/FranchoWireBot/crear_cliente.sh'    # ruta al script bash
-CLIENTS_DIR    = '/home/ubuntu/francho_wire/clientes'             # donde se guardan .conf y .png
-CLIENTES_DIR   = CLIENTS_DIR                                      # alias español (para import en admin_handlers)
+# ID del administrador autorizado
+ADMIN_ID = 1383931339
 
-# — WireGuard servidor —
-WG_INTERFACE        = 'wg0'
-WG_CONFIG_DIR       = f'/etc/wireguard/configs'                   # donde guarda wg-quick sus .conf
-WG_PORT             = 51820
+# Ruta al script bash que crea la config de cada cliente
+SCRIPT_PATH = '/home/ubuntu/FranchoWireBot/crear_cliente.sh'
+
+# Carpeta donde el script deja los .conf y los QR
+CLIENTS_DIR = '/home/ubuntu/francho_wire/clientes'
+
+# IP pública de tu VPS (para el Endpoint en los archivos .conf)
+SERVER_PUBLIC_IP = '3.145.41.118'
+
+# Puerto de WireGuard en el servidor
+SERVER_PORT = '51820'
+
+# Rango de IPs internas para asignar dinámicamente a los clientes
 IP_RANGO_INICIO = '10.9.0.2'
-SERVER_PUBLIC_IP    = '3.145.41.118'
-SERVER_PUBLIC_KEY   = '/etc/wireguard/server_public.key'          # ruta a tu clave pública
-SERVER_ENDPOINT     = f'{SERVER_PUBLIC_IP}:{WG_PORT}'
-WG_NETWORK_RANGE    = '0.0.0.0/0'
+IP_RANGO_FIN    = '10.9.0.254'
 
-# — Planes de cliente —
-PLANES_PRECIOS = {
-    "Free (5 horas)": {"horas": 5},
-    "15 días":        {"dias": 15},
-    "30 días":        {"dias": 30},
+# Planes disponibles y su duración
+# Las claves deben coincidir con los botones que muestras en el bot
+PLANS = {
+    "Free (5 horas)": {"hours": 5},
+    "15 días":         {"days": 15},
+    "30 días":         {"days": 30},
 }
-PLANES = list(PLANES_PRECIOS.keys())
-PLANS  = PLANES  # alias para quienes importen PLANS
-
-# — Logs y demás (opcional) —
-GRUPO_LOGS = None
