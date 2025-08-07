@@ -1,32 +1,36 @@
 # config.py
 
-# 🎯 Token del bot de Telegram
+# Token del bot
 BOT_TOKEN = '8334285648:AAFui_V95j-RgnTtkYQO_-SdgYCUjX6oBo4'
 
-# 👨‍💻 ID del administrador (solo esta persona podrá usar el bot)
-ADMIN_ID = 1383931339  # Cambia este ID si deseas autorizar a otro usuario
+# ID del administrador autorizado
+ADMIN_ID = 1383931339  # Cámbialo si deseas otro ID
 
-# 📁 Ruta al script bash que crea clientes y genera configuraciones
-SCRIPT_PATH = '/home/ubuntu/FranchoWireBot/crear_cliente.sh'
+# Ruta correcta al script bash para crear clientes
+SCRIPT_PATH = '/home/ubuntu/FranchoWireBot/crear_cliente.sh'  # ✅ Corregido
 
-# 📂 Carpeta donde se guardan las configuraciones generadas (.conf y QR)
+# Carpeta donde se guardan los archivos generados por el script
 CLIENTS_DIR = '/home/ubuntu/francho_wire/clientes'
 
-# 🌐 IP pública del servidor (se usará en las configuraciones .conf)
-SERVER_PUBLIC_IP = '3.145.41.118'
+# IP pública del servidor
+SERVER_PUBLIC_IP = '3.145.41.118' 
 
-# 📦 Planes disponibles para los clientes (nombre, precio y duración)
+# Puerto donde escucha el servidor WireGuard
+LISTEN_PORT = 51820
+
+# Ruta base donde se almacenan los .conf
+WG_CONFIG_DIR = '/etc/wireguard'
+
+# Planes disponibles
 PLANS = {
-    "🆓 Prueba (5h)": {
-        "precio": 0,
-        "duración_horas": 5
-    },
-    "💵 Plan Básico (7 días)": {
-        "precio": 100,
-        "duración_dias": 7
-    },
-    "💎 Plan Premium (30 días)": {
-        "precio": 300,
-        "duración_dias": 30
-    }
+    "🧪 Prueba gratuita (5h)": 5,
+    "📅 Plan Diario (24h)": 24,
+    "🗓 Plan Semanal (7 días)": 24 * 7,
+    "📆 Plan Mensual (30 días)": 24 * 30,
 }
+
+# Configuraciones para recordatorios antes de vencer
+AVISOS_VENCIMIENTO_HORAS = [72, 24]  # 3 días y 1 día antes
+
+# Cada cuánto se revisan las expiraciones (en segundos)
+REVISIÓN_INTERVALO_SEGUNDOS = 3600  # 1 hora
