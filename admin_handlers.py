@@ -10,7 +10,7 @@ from generator import create_config
 from datetime import datetime, timedelta
 import os
 
-CONFIGS_FILE = 'data/configuraciones.json'
+CONFIGS_FILE = os.path.join('data', 'configuraciones.json')
 
 def admin_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -35,7 +35,7 @@ def gestion_menu():
     )
     return kb
 
-# Temporal storage for multi-step flows
+# Almacenaje temporal para flujos multipaso
 TEMP = {}
 
 def register_admin_handlers(bot: TeleBot):
@@ -44,8 +44,6 @@ def register_admin_handlers(bot: TeleBot):
     def handle_start(message):
         if message.from_user.id != ADMIN_ID:
             return bot.send_message(message.chat.id, "⛔️ Acceso restringido.")
-
-        # Detailed welcome and instructions
         text = (
             "👋 *Bienvenido al Panel de Administración de Francho Wire Bot*\n\n"
             "Con este bot podrás gestionar tus clientes WireGuard de manera sencilla:\n"
@@ -125,7 +123,6 @@ def register_admin_handlers(bot: TeleBot):
                 "❌ Plan inválido, intenta de nuevo.",
                 reply_markup=admin_menu()
             )
-        # calculate expiration
         delta = PLANS[plan]
         venc = datetime.now() + timedelta(**delta)
         success, conf_path, qr_path = create_config(cliente, venc)
@@ -139,13 +136,16 @@ def register_admin_handlers(bot: TeleBot):
             f"✅ *{cliente}* creado.\n"
             f"📅 Vence el: *{venc.strftime('%d/%m/%Y %H:%M')}*"
         )
-        # send files
         with open(conf_path, 'rb') as f:
             bot.send_document(message.chat.id, f, caption=caption, parse_mode="Markdown")
         with open(qr_path, 'rb') as qr:
             bot.send_photo(message.chat.id, qr)
         TEMP.pop(message.chat.id, None)
-        bot.send_message(message.chat.id, "↩️ Regresando al menú principal.", reply_markup=admin_menu())
+        bot.send_message(
+            message.chat.id,
+            "↩️ Regresando al menú principal.",
+            reply_markup=admin_menu()
+        )
 
     @bot.message_handler(func=lambda m: m.text == '🗂 Ver todas')
     def ver_todas(message):
@@ -186,7 +186,7 @@ def register_admin_handlers(bot: TeleBot):
 
     def enviar_qr(message):
         cliente = message.text.strip()
-        path = f"data/clientes/{cliente}.png"
+        path = os.path.join('data', 'clientes', f"{cliente}.png")
         if not os.path.exists(path):
             return bot.send_message(message.chat.id, "❌ QR no encontrado.")
         with open(path, 'rb') as qr:
@@ -203,7 +203,7 @@ def register_admin_handlers(bot: TeleBot):
 
     def enviar_conf(message):
         cliente = message.text.strip()
-        path = f"data/clientes/{cliente}.conf"
+        path = os.path.join('data', 'clientes', f"{cliente}.conf")
         if not os.path.exists(path):
             return bot.send_message(message.chat.id, "❌ .conf no encontrado.")
         with open(path, 'rb') as conf:
@@ -242,7 +242,10 @@ def register_admin_handlers(bot: TeleBot):
     def ejecutar_eliminacion(message):
         cliente = message.text.strip()
         if delete_config(cliente):
-            bot.send_message(message.chat.id, f"🗑️ *{cliente}* eliminado.", parse_mode="Markdown")
+            bot.send_message(
+                message.chat.id,
+                f"🗑️ *{cliente}* eliminado.",
+                parse_mode="Markdown"
+            )
         else:
             bot.send_message(message.chat.id, "❌ No se pudo eliminar. Verifica el nombre.")
-```0
