@@ -1,16 +1,17 @@
 # admin_handlers.py
 
+import os
+from datetime import datetime
 from telebot import TeleBot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
-from config import ADMIN_ID, PLANS
+from config import ADMIN_ID, PLANS, CLIENTS_DIR
 from storage import load_json, save_json
 from utils import generate_qr, renew_config, delete_config, get_stats, calcular_nuevo_vencimiento
 from generator import create_config
-from datetime import datetime
-import os
 
-CONFIGS_FILE = os.path.join('data', 'configuraciones.json')
+# Usamos la misma carpeta de CLIENTS_DIR para almacenar el JSON
+CONFIGS_FILE = os.path.join(CLIENTS_DIR, 'configuraciones.json')
 
 def admin_menu():
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
@@ -35,6 +36,7 @@ def gestion_menu():
     )
     return kb
 
+# Almacenamos el estado temporal en memoria
 TEMP = {}
 
 def register_admin_handlers(bot: TeleBot):
@@ -44,8 +46,8 @@ def register_admin_handlers(bot: TeleBot):
         if message.from_user.id != ADMIN_ID:
             return bot.send_message(message.chat.id, "⛔️ Acceso restringido.")
         text = (
-            "👋 *Bienvenido al Panel de Administración de Francho Wire Bot*\n\n"
-            "Gestiona fácilmente tus clientes WireGuard:\n"
+            "👋 *Panel de Administración Francho Wire Bot*\n\n"
+            "Gestiona tus clientes WireGuard de forma rápida:\n"
             "• ➕ Crear configuración\n"
             "• 🛠 Gestionar configuraciones\n"
             "• 📊 Estadísticas\n"
@@ -79,6 +81,9 @@ def register_admin_handlers(bot: TeleBot):
         )
         bot.send_message(message.chat.id, msg, parse_mode="Markdown")
 
+    #
+    # —— Crear configuración —— 
+    #
     @bot.message_handler(func=lambda m: m.text == '➕ Crear configuración')
     def iniciar_creacion(message):
         bot.send_message(
@@ -143,6 +148,9 @@ def register_admin_handlers(bot: TeleBot):
             reply_markup=admin_menu()
         )
 
+    #
+    # —— Ver todas —— 
+    #
     @bot.message_handler(func=lambda m: m.text == '🗂 Ver todas')
     def ver_todas(message):
         datos = load_json(CONFIGS_FILE)
@@ -154,6 +162,9 @@ def register_admin_handlers(bot: TeleBot):
             lines.append(f"• {cli}: {estado} — vence {info['vencimiento']}")
         bot.send_message(message.chat.id, "\n".join(lines), parse_mode="Markdown")
 
+    #
+    # —— Por expirar —— 
+    #
     @bot.message_handler(func=lambda m: m.text == '📆 Por expirar')
     def por_expirar(message):
         datos = load_json(CONFIGS_FILE)
@@ -165,83 +176,114 @@ def register_admin_handlers(bot: TeleBot):
             if 0 <= dias <= 3:
                 proximas.append((cli, dias))
         if not proximas:
-            return bot.send_message(message.chat.id, "✅ No hay próximas a expirar.")
+            return bot.send_message(message.chat.id, "✅ No hay configuraciones próximas a expirar.")
         lines = ["📆 *Por expirar en próximos 3 días:*"]
         for cli, dias in proximas:
             lines.append(f"• {cli}: vence en {dias} día(s)")
         bot.send_message(message.chat.id, "\n".join(lines), parse_mode="Markdown")
 
-    @bot.message_handler(func=lambda m: m.text == '📁 Ver QR')
-    def ver_qr(message):
-        bot.send_message(
-            message.chat.id,
-            "✏️ *Nombre del cliente* para ver QR:",
-            parse_mode="Markdown"
-        )
-        bot.register_next_step_handler(message, enviar_qr)
-
-    def enviar_qr(message):
-        cliente = message.text.strip()
-        path = os.path.join('data', 'clientes', f"{cliente}.png")
-        if not os.path.exists(path):
-            return bot.send_message(message.chat.id, "❌ QR no encontrado.")
-        with open(path, 'rb') as qr:
-            bot.send_photo(message.chat.id, qr, caption=f"📸 QR de *{cliente}*", parse_mode="Markdown")
-
-    @bot.message_handler(func=lambda m: m.text == '📄 Descargar .conf')
-    def ver_conf(message):
-        bot.send_message(
-            message.chat.id,
-            "✏️ *Nombre del cliente* para .conf:",
-            parse_mode="Markdown"
-        )
-        bot.register_next_step_handler(message, enviar_conf)
-
-    def enviar_conf(message):
-        cliente = message.text.strip()
-        path = os.path.join('data', 'clientes', f"{cliente}.conf")
-        if not os.path.exists(path):
-            return bot.send_message(message.chat.id, "❌ .conf no encontrado.")
-        with open(path, 'rb') as conf:
-            bot.send_document(message.chat.id, conf, caption=f"📄 *{cliente}*", parse_mode="Markdown")
-
+    #
+    # —— Renovar —— 
+    #
     @bot.message_handler(func=lambda m: m.text == '♻️ Renovar')
-    def renovar(message):
-        bot.send_message(
-            message.chat.id,
-            "✏️ *Nombre del cliente* a renovar:",
-            parse_mode="Markdown"
-        )
+    def renew_menu(message):
+        datos = load_json(CONFIGS_FILE)
+        if not datos:
+            return bot.send_message(message.chat.id, "ℹ️ No hay configuraciones para renovar.", reply_markup=admin_menu())
+        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        for cli in datos.keys():
+            kb.add(KeyboardButton(cli))
+        kb.add(KeyboardButton('🔙 Menú admin'))
+        bot.send_message(message.chat.id, "♻️ Selecciona un cliente a renovar:", reply_markup=kb)
         bot.register_next_step_handler(message, ejecutar_renovacion)
 
     def ejecutar_renovacion(message):
+        if message.text == '🔙 Menú admin':
+            return bot.send_message(message.chat.id, "↩️ Menú principal.", reply_markup=admin_menu())
         cliente = message.text.strip()
         exito, nuevo = renew_config(cliente)
         if exito:
             bot.send_message(
                 message.chat.id,
-                f"♻️ *{cliente}* renovado hasta {nuevo.strftime('%d/%m/%Y')}",
-                parse_mode="Markdown"
+                f"♻️ *{cliente}* renovado hasta {nuevo.strftime('%d/%m/%Y %H:%M')}",
+                parse_mode="Markdown",
+                reply_markup=admin_menu()
             )
         else:
-            bot.send_message(message.chat.id, "❌ No se pudo renovar.")
+            bot.send_message(message.chat.id, "❌ No se pudo renovar.", reply_markup=admin_menu())
 
+    #
+    # —— Eliminar —— 
+    #
     @bot.message_handler(func=lambda m: m.text == '❌ Eliminar')
-    def eliminar(message):
-        bot.send_message(
-            message.chat.id,
-            "✏️ *Nombre del cliente* a eliminar:",
-            parse_mode="Markdown"
-        )
+    def delete_menu(message):
+        datos = load_json(CONFIGS_FILE)
+        if not datos:
+            return bot.send_message(message.chat.id, "ℹ️ No hay configuraciones para eliminar.", reply_markup=admin_menu())
+        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        for cli in datos.keys():
+            kb.add(KeyboardButton(cli))
+        kb.add(KeyboardButton('🔙 Menú admin'))
+        bot.send_message(message.chat.id, "❌ Selecciona un cliente a eliminar:", reply_markup=kb)
         bot.register_next_step_handler(message, ejecutar_eliminacion)
 
     def ejecutar_eliminacion(message):
+        if message.text == '🔙 Menú admin':
+            return bot.send_message(message.chat.id, "↩️ Menú principal.", reply_markup=admin_menu())
         cliente = message.text.strip()
         if delete_config(cliente):
-            bot.send_message(
-                message.chat.id,
-                f"🗑️ *{cliente}* eliminado.",
-                parse_mode="Markdown"
-            )
+            bot.send_message(message.chat.id, f"🗑️ *{cliente}* eliminado.", parse_mode="Markdown", reply_markup=admin_menu())
         else:
-            bot.send_message(message.chat.id, "❌ No se pudo eliminar.")
+            bot.send_message(message.chat.id, "❌ No se encontró el cliente.", reply_markup=admin_menu())
+
+    #
+    # —— Ver QR —— 
+    #
+    @bot.message_handler(func=lambda m: m.text == '📁 Ver QR')
+    def qr_menu(message):
+        datos = load_json(CONFIGS_FILE)
+        if not datos:
+            return bot.send_message(message.chat.id, "ℹ️ No hay configuraciones.", reply_markup=admin_menu())
+        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        for cli in datos.keys():
+            kb.add(KeyboardButton(cli))
+        kb.add(KeyboardButton('🔙 Menú admin'))
+        bot.send_message(message.chat.id, "📁 Selecciona un cliente para ver su QR:", reply_markup=kb)
+        bot.register_next_step_handler(message, enviar_qr_selection)
+
+    def enviar_qr_selection(message):
+        if message.text == '🔙 Menú admin':
+            return bot.send_message(message.chat.id, "↩️ Menú principal.", reply_markup=admin_menu())
+        cliente = message.text.strip()
+        qr_path = os.path.join(CLIENTS_DIR, f"{cliente}.png")
+        if os.path.exists(qr_path):
+            with open(qr_path, 'rb') as qr:
+                bot.send_photo(message.chat.id, qr, caption=f"📸 QR de *{cliente}*", parse_mode="Markdown")
+        else:
+            bot.send_message(message.chat.id, "❌ QR no encontrado.", reply_markup=admin_menu())
+
+    #
+    # —— Descargar .conf —— 
+    #
+    @bot.message_handler(func=lambda m: m.text == '📄 Descargar .conf')
+    def conf_menu(message):
+        datos = load_json(CONFIGS_FILE)
+        if not datos:
+            return bot.send_message(message.chat.id, "ℹ️ No hay configuraciones.", reply_markup=admin_menu())
+        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        for cli in datos.keys():
+            kb.add(KeyboardButton(cli))
+        kb.add(KeyboardButton('🔙 Menú admin'))
+        bot.send_message(message.chat.id, "📄 Selecciona un cliente para descargar su .conf:", reply_markup=kb)
+        bot.register_next_step_handler(message, enviar_conf_selection)
+
+    def enviar_conf_selection(message):
+        if message.text == '🔙 Menú admin':
+            return bot.send_message(message.chat.id, "↩️ Menú principal.", reply_markup=admin_menu())
+        cliente = message.text.strip()
+        conf_path = os.path.join(CLIENTS_DIR, f"{cliente}.conf")
+        if os.path.exists(conf_path):
+            with open(conf_path, 'rb') as f:
+                bot.send_document(message.chat.id, f, caption=f"📄 *{cliente}*", parse_mode="Markdown")
+        else:
+            bot.send_message(message.chat.id, "❌ .conf no encontrado.", reply_markup=admin_menu())
