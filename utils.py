@@ -1,97 +1,132 @@
 # utils.py
 
 import os
-import subprocess
-import ipaddress
 import json
 import qrcode
-from io import BytesIO
 from datetime import datetime, timedelta
 
 from config import (
     WG_CONFIG_DIR,
-    CLIENTS_DIR,            # Ajustado al nombre definido en config.py
-    IP_RANGO_INICIO,
-    IP_RANGO_FIN,
-    SERVER_PUBLIC_IP,
+    CLIENTS_DIR,
+    SERVER_PUBLIC_KEY,
+    SERVER_ENDPOINT,
+    WG_PORT,
     LISTEN_PORT,
-    SERVER_PUBLIC_KEY
+    WG_NETWORK_RANGE,
+    PLANS
 )
+
+# Ruta donde guardamos el JSON con metadatos de todos los clientes
+CONFIGS_FILE = os.path.join(CLIENTS_DIR, 'configuraciones.json')
 
 # ========================= RUTAS =========================
 
 def ruta_conf_cliente(nombre: str) -> str:
+    """Devuelve la ruta absoluta del .conf de un cliente."""
+    return os.path.join(CLIENTS_DIR, f"{nombre}.conf")
+
+def ruta_qr_cliente(nombre: str) -> str:
+    """Devuelve la ruta absoluta del .png QR de un cliente."""
+    return os.path.join(CLIENTS_DIR, f"{nombre}.png")
+
+# ========================= VENCIMIENTOS =========================
+
+def calcular_nuevo_vencimiento(plan: str) -> datetime:
     """
-    Devuelve la ruta absoluta del archivo .conf de un cliente.
+    Calcula la nueva fecha de vencimiento según el plan elegido.
+    Planes definidos en config.PLANS con claves 'dias' o 'horas'.
     """
-    return os.path.join(WG_CONFIG_DIR, f"{nombre}.conf")
+    delta = PLANS[plan]
+    dias = delta.get('dias', 0)
+    horas = delta.get('horas', 0)
+    return datetime.now() + timedelta(days=dias, hours=horas)
 
+# ========================= QR =========================
 
-# ========================= GESTIÓN DE CLIENTES =========================
-
-def calcular_vencimiento(dias: int) -> str:
+def generate_qr(ruta_conf: str) -> str:
     """
-    Calcula la fecha de vencimiento a partir de los días proporcionados.
+    Genera un PNG con código QR a partir del contenido de un .conf.
+    Devuelve la ruta al .png generado.
     """
-    vencimiento = datetime.now() + timedelta(days=dias)
-    return vencimiento.strftime("%Y-%m-%d %H:%M")
-
-
-def cargar_cliente(nombre: str):
-    """
-    Carga los datos del cliente desde su archivo JSON.
-    """
-    ruta = os.path.join(CLIENTS_DIR, f"{nombre}.json")
-    if not os.path.exists(ruta):
-        return None
-    with open(ruta, "r") as f:
-        return json.load(f)
-
-
-def obtener_ips_asignadas():
-    """
-    Devuelve una lista de todas las IPs asignadas actualmente a los clientes.
-    """
-    ips = []
-    for archivo in os.listdir(CLIENTS_DIR):
-        if archivo.endswith(".json"):
-            ruta = os.path.join(CLIENTS_DIR, archivo)
-            with open(ruta, "r") as f:
-                data = json.load(f)
-                ip = data.get("ip")
-                if ip:
-                    ips.append(ip)
-    return ips
-
-
-def asignar_ip_disponible():
-    """
-    Busca la próxima IP disponible dentro del rango definido.
-    """
-    usadas = obtener_ips_asignadas()
-    inicio = ipaddress.IPv4Address(IP_RANGO_INICIO)
-    fin = ipaddress.IPv4Address(IP_RANGO_FIN)
-
-    for ip_int in range(int(inicio), int(fin) + 1):
-        ip_str = str(ipaddress.IPv4Address(ip_int))
-        if ip_str not in usadas:
-            return ip_str
-    raise RuntimeError("❌ No hay IPs disponibles en el rango definido.")
-
-
-# ========================= CÓDIGO QR =========================
-
-def generar_qr_desde_conf(ruta_archivo: str):
-    """
-    Genera un código QR desde el contenido de un archivo .conf.
-    Devuelve un objeto BytesIO con la imagen PNG.
-    """
-    if not os.path.exists(ruta_archivo):
-        return None
-    with open(ruta_archivo, "r") as f:
+    if not os.path.exists(ruta_conf):
+        raise FileNotFoundError(f"No existe el archivo de configuración: {ruta_conf}")
+    with open(ruta_conf, 'r') as f:
         contenido = f.read()
-    qr = qrcode.make(contenido)
-    bio = BytesIO()
-    qr.save(bio, format="PNG")
-    bio.seek(0)
-    return bio
+    img = qrcode.make(contenido)
+    qr_path = ruta_conf.replace('.conf', '.png')
+    img.save(qr_path)
+    return qr_path
+
+# ========================= ESTADÍSTICAS =========================
+
+def get_stats() -> (int, int):
+    """
+    Retorna una tupla (activos, expirados) según las fechas en CONFIGS_FILE.
+    Si no existe el JSON, devuelve (0,0).
+    """
+    if not os.path.exists(CONFIGS_FILE):
+        return 0, 0
+    with open(CONFIGS_FILE, 'r') as f:
+        data = json.load(f)
+    activos = expirados = 0
+    ahora = datetime.now()
+    for info in data.values():
+        venc = datetime.strptime(info['vencimiento'], "%Y-%m-%d %H:%M")
+        if venc > ahora:
+            activos += 1
+        else:
+            expirados += 1
+    return activos, expirados
+
+# ========================= RENOVACIÓN =========================
+
+def renew_config(nombre: str) -> (bool, datetime):
+    """
+    Renueva la fecha de vencimiento de un cliente.
+    Retorna (True, nueva_fecha) si existía, o (False, None) en otro caso.
+    """
+    if not os.path.exists(CONFIGS_FILE):
+        return False, None
+    with open(CONFIGS_FILE, 'r') as f:
+        data = json.load(f)
+    if nombre not in data:
+        return False, None
+    plan = data[nombre]['plan']
+    nueva_fecha = calcular_nuevo_vencimiento(plan)
+    data[nombre]['vencimiento'] = nueva_fecha.strftime("%Y-%m-%d %H:%M")
+    with open(CONFIGS_FILE, 'w') as f:
+        json.dump(data, f, indent=2)
+    return True, nueva_fecha
+
+# ========================= ELIMINACIÓN =========================
+
+def delete_config(nombre: str) -> bool:
+    """
+    Elimina .conf, .png y la entrada JSON de CONFIGS_FILE.
+    Retorna True si algo se borró, False si no encontró nada.
+    """
+    removed = False
+
+    # Borrar .conf
+    conf = ruta_conf_cliente(nombre)
+    if os.path.exists(conf):
+        os.remove(conf)
+        removed = True
+
+    # Borrar QR
+    qr = ruta_qr_cliente(nombre)
+    if os.path.exists(qr):
+        os.remove(qr)
+        removed = True
+
+    # Borrar del JSON
+    if os.path.exists(CONFIGS_FILE):
+        with open(CONFIGS_FILE, 'r') as f:
+            data = json.load(f)
+        if nombre in data:
+            data.pop(nombre)
+            with open(CONFIGS_FILE, 'w') as f:
+                json.dump(data, f, indent=2)
+            removed = True
+
+    return removed
