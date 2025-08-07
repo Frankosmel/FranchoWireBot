@@ -1,5 +1,3 @@
-# crear_cliente.sh
-
 #!/bin/bash
 
 # ===============================
@@ -9,19 +7,24 @@
 # Nombre del cliente (pasado como argumento)
 CLIENT_NAME="$1"
 
-# Rutas
+# ===============================
+# 📁 Rutas y configuración
+# ===============================
 WG_DIR="/etc/wireguard"
 SERVER_PUBLIC_KEY_PATH="$WG_DIR/server_public.key"
-SERVER_IP="3.145.41.118"  # ← Asegúrate de que sea tu IP pública real
+SERVER_IP="3.145.41.118"  # ← Reemplaza por tu IP pública si cambia
 CLIENTS_DIR="/home/ubuntu/francho_wire/clientes"
 CONF_DIR="$CLIENTS_DIR"
 QR_DIR="$CLIENTS_DIR"
 WG_PORT="51820"
 WG_INTERFACE="wg0"
 
-# Verificaciones iniciales
+# ===============================
+# 🔎 Verificaciones iniciales
+# ===============================
 if [ -z "$CLIENT_NAME" ]; then
   echo "❌ Debes indicar un nombre para el cliente."
+  echo "➡️  Uso: ./crear_cliente.sh NombreCliente"
   exit 1
 fi
 
@@ -32,7 +35,9 @@ fi
 
 mkdir -p "$CLIENTS_DIR"
 
-# Generar claves del cliente
+# ===============================
+# 🔐 Generar claves del cliente
+# ===============================
 CLIENT_PRIVATE_KEY=$(wg genkey)
 CLIENT_PUBLIC_KEY=$(echo "$CLIENT_PRIVATE_KEY" | wg pubkey)
 CLIENT_IP="10.9.0.$((RANDOM % 200 + 2))/32"
@@ -40,8 +45,11 @@ CLIENT_IP="10.9.0.$((RANDOM % 200 + 2))/32"
 # Leer clave pública del servidor
 SERVER_PUBLIC_KEY=$(cat "$SERVER_PUBLIC_KEY_PATH")
 
-# Crear archivo de configuración
+# ===============================
+# 📝 Crear archivo de configuración del cliente
+# ===============================
 CONFIG_FILE="$CONF_DIR/$CLIENT_NAME.conf"
+
 cat > "$CONFIG_FILE" <<EOF
 [Interface]
 PrivateKey = $CLIENT_PRIVATE_KEY
@@ -55,18 +63,31 @@ AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 EOF
 
-# Generar QR
+# ===============================
+# 🧩 Agregar cliente al servidor (wg0.conf)
+# ===============================
+echo -e "\n# $CLIENT_NAME" >> "$WG_DIR/$WG_INTERFACE.conf"
+echo "[Peer]" >> "$WG_DIR/$WG_INTERFACE.conf"
+echo "PublicKey = $CLIENT_PUBLIC_KEY" >> "$WG_DIR/$WG_INTERFACE.conf"
+echo "AllowedIPs = ${CLIENT_IP}" >> "$WG_DIR/$WG_INTERFACE.conf"
+echo "PersistentKeepalive = 25" >> "$WG_DIR/$WG_INTERFACE.conf"
+
+# 🌀 Aplicar configuración si el servicio está activo
+if systemctl is-active --quiet wg-quick@$WG_INTERFACE; then
+  echo -e "\n🔁 Aplicando configuración dinámica a la interfaz WireGuard..."
+  echo -e "[Peer]\nPublicKey = $CLIENT_PUBLIC_KEY\nAllowedIPs = ${CLIENT_IP}\nPersistentKeepalive = 25" | sudo wg addconf $WG_INTERFACE /dev/stdin
+else
+  echo "⚠️ La interfaz $WG_INTERFACE no está activa. El cliente fue agregado al archivo pero no aplicado aún."
+fi
+
+# ===============================
+# 📸 Generar código QR del cliente
+# ===============================
 qrencode -o "$QR_DIR/$CLIENT_NAME.png" -t png < "$CONFIG_FILE"
 
-# ✅ Agregar al servidor como peer
-echo -e "\n[Peer]
-PublicKey = $CLIENT_PUBLIC_KEY
-AllowedIPs = ${CLIENT_IP}" | sudo tee -a "$WG_DIR/$WG_INTERFACE.conf" > /dev/null
-
-# 🔄 Recargar configuración sin reiniciar servicio
-sudo wg addconf $WG_INTERFACE <(wg-quick strip $WG_INTERFACE)
-
-# Confirmación
-echo "✅ Cliente $CLIENT_NAME creado correctamente."
-echo "📄 Archivo: $CONFIG_FILE"
-echo "🖼️ QR: $QR_DIR/$CLIENT_NAME.png"
+# ===============================
+# ✅ Finalización
+# ===============================
+echo "✅ Cliente *$CLIENT_NAME* creado correctamente."
+echo "📄 Archivo de configuración: $CONFIG_FILE"
+echo "🖼️ QR generado: $QR_DIR/$CLIENT_NAME.png"
