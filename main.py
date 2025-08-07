@@ -1,24 +1,16 @@
 # main.py
 
-from telebot import TeleBot, types
+from telebot import TeleBot
 import subprocess
 import os
+
 from config import BOT_TOKEN, ADMIN_ID, SCRIPT_PATH, CLIENTS_DIR
+from admin_handlers import register_admin_handlers  # ✅ Importar handlers de admin
 
 bot = TeleBot(BOT_TOKEN)
 
 def is_admin(user_id):
     return user_id == ADMIN_ID
-
-@bot.message_handler(commands=['start'])
-def start(message):
-    if is_admin(message.from_user.id):
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.row('📦 Crear cliente')
-        markup.row('📁 Ver archivos')
-        bot.send_message(message.chat.id, "✅ Bienvenido al *panel de administración de Francho Wire Bot*.", parse_mode="Markdown", reply_markup=markup)
-    else:
-        bot.send_message(message.chat.id, "❌ No tienes permisos para usar este bot.")
 
 @bot.message_handler(func=lambda m: m.text == '📦 Crear cliente')
 def solicitar_nombre_cliente(message):
@@ -75,6 +67,9 @@ def listar_archivos(message):
         elif file.endswith(".png"):
             with open(path, 'rb') as f:
                 bot.send_photo(message.chat.id, f, caption=f"🖼️ {file}")
+
+# ✅ Registrar los handlers de admin
+register_admin_handlers(bot)
 
 if __name__ == '__main__':
     bot.infinity_polling()
