@@ -1,24 +1,32 @@
-# generator.py
+# generator.py  ✅ Corregido para usar la MISMA ruta de JSON y la
+#                función registrar_config de utils.py
 
 import os
 import subprocess
-import json
 from datetime import datetime
+
 from config import SCRIPT_PATH, CLIENTS_DIR
-from utils import ruta_conf_cliente, ruta_qr_cliente, generate_qr
+from utils import (
+    ruta_conf_cliente,
+    ruta_qr_cliente,
+    generate_qr,
+    registrar_config          # ← nuevo: guardamos todo en un solo sitio
+)
 
-# Ruta al JSON que guarda metadatos de todas las configuraciones
-CONFIGS_FILE = os.path.join(CLIENTS_DIR, 'configuraciones.json')
+def create_config(cliente: str, plan: str, vencimiento: datetime):
+    """
+    Crea una nueva configuración WireGuard:
 
-def create_config(cliente: str, vencimiento: datetime):
+    • Ejecuta el script bash (SCRIPT_PATH) → genera .conf
+    • Genera el QR si falta.
+    • Registra la entrada en *data/configuraciones.json* mediante utils.registrar_config
+
+    Retorna:
+        (True, ruta_conf, ruta_qr)    en éxito
+        (False, mensaje_error, None)  en error
     """
-    Ejecuta el script de creación de cliente, genera el .conf y el .png, 
-    registra la nueva configuración en configuraciones.json, y devuelve:
-      (True, ruta_conf, ruta_qr)
-    o en caso de error:
-      (False, mensaje_error, None)
-    """
-    # 1️⃣ Ejecutar el script bash
+
+    # 1️⃣  Ejecutar el script bash
     result = subprocess.run(
         ["sudo", "bash", SCRIPT_PATH, cliente],
         capture_output=True,
@@ -27,33 +35,21 @@ def create_config(cliente: str, vencimiento: datetime):
     if result.returncode != 0:
         return False, result.stderr.strip(), None
 
-    # 2️⃣ Rutas esperadas
+    # 2️⃣  Verificar rutas generadas
     conf_path = ruta_conf_cliente(cliente)
     qr_path   = ruta_qr_cliente(cliente)
 
-    # 3️⃣ Generar QR si no existe
+    if not os.path.isfile(conf_path):
+        return False, f"No se encontró {conf_path}", None
+
+    # 3️⃣  Generar QR si aún no existe
     if not os.path.isfile(qr_path):
         try:
             generate_qr(conf_path)
         except Exception as e:
             return False, f"Error al generar QR: {e}", None
 
-    # 4️⃣ Registrar en configuraciones.json
-    datos = {}
-    if os.path.isfile(CONFIGS_FILE):
-        with open(CONFIGS_FILE, 'r') as f:
-            try:
-                datos = json.load(f)
-            except json.JSONDecodeError:
-                datos = {}
+    # 4️⃣  Registrar en configuraciones.json (una sola fuente de verdad)
+    registrar_config(cliente, plan, vencimiento)
 
-    datos[cliente] = {
-        "vencimiento": vencimiento.strftime("%Y-%m-%d %H:%M"),
-        "activa": True
-    }
-
-    with open(CONFIGS_FILE, 'w') as f:
-        json.dump(datos, f, indent=2)
-
-    # 5️⃣ Devolver éxito y rutas
     return True, conf_path, qr_path
