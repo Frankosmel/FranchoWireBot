@@ -1,4 +1,5 @@
 # admin_handlers.py
+
 from telebot import TeleBot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 
@@ -11,24 +12,30 @@ import os
 
 CONFIGS_FILE = 'data/configuraciones.json'
 
-# Funciones auxiliares para teclado
-
 def admin_menu():
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add('🛠 Gestionar configuraciones')
-    kb.add('➕ Crear configuración', '📊 Estadísticas')
-    kb.add('🔙 Volver')
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    kb.add(
+        KeyboardButton('➕ Crear configuración'),
+        KeyboardButton('🛠 Gestionar configuraciones'),
+        KeyboardButton('📊 Estadísticas'),
+        KeyboardButton('🔙 Volver')
+    )
     return kb
 
 def gestion_menu():
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add('🗂 Ver todas', '📆 Por expirar')
-    kb.add('♻️ Renovar', '❌ Eliminar')
-    kb.add('📁 Ver QR', '📄 Descargar .conf')
-    kb.add('🔙 Menú admin')
+    kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    kb.add(
+        KeyboardButton('🗂 Ver todas'),
+        KeyboardButton('📆 Por expirar'),
+        KeyboardButton('♻️ Renovar'),
+        KeyboardButton('❌ Eliminar'),
+        KeyboardButton('📁 Ver QR'),
+        KeyboardButton('📄 Descargar .conf'),
+        KeyboardButton('🔙 Menú admin')
+    )
     return kb
 
-# Variables temporales
+# Temporal storage for multi-step flows
 TEMP = {}
 
 def register_admin_handlers(bot: TeleBot):
@@ -36,128 +43,164 @@ def register_admin_handlers(bot: TeleBot):
     @bot.message_handler(commands=['start'])
     def handle_start(message):
         if message.from_user.id != ADMIN_ID:
-            return bot.send_message(message.chat.id, "⛔ Acceso restringido.")
-        bot.send_message(message.chat.id, "👋 Bienvenido al panel de administrador", reply_markup=admin_menu())
+            return bot.send_message(message.chat.id, "⛔️ Acceso restringido.")
+
+        # Detailed welcome and instructions
+        text = (
+            "👋 *Bienvenido al Panel de Administración de Francho Wire Bot*\n\n"
+            "Con este bot podrás gestionar tus clientes WireGuard de manera sencilla:\n"
+            "• ➕ Crear configuración: Genera archivos .conf y códigos QR.\n"
+            "• 🛠 Gestionar configuraciones: Ver, renovar o eliminar configuraciones.\n"
+            "• 📊 Estadísticas: Consulta cuántos clientes están activos o expirados.\n"
+            "• 🔙 Volver: Regresa al menú principal en cualquier momento.\n\n"
+            "Selecciona una opción para comenzar."
+        )
+        bot.send_message(
+            message.chat.id,
+            text,
+            parse_mode="Markdown",
+            reply_markup=admin_menu()
+        )
 
     @bot.message_handler(func=lambda m: m.text == '🛠 Gestionar configuraciones')
     def handle_gestionar(message):
-        bot.send_message(message.chat.id, "Elige una opción:", reply_markup=gestion_menu())
+        bot.send_message(message.chat.id, "🔧 *Gestión de Configuraciones*\nElige una acción:", 
+                         parse_mode="Markdown", reply_markup=gestion_menu())
 
     @bot.message_handler(func=lambda m: m.text == '📊 Estadísticas')
     def handle_stats(message):
         activos, expirados = get_stats()
         total = activos + expirados
-        msg = f"📊 Estadísticas del sistema:\n\n"
-        msg += f"✅ Activas: {activos}\n"
-        msg += f"⛔ Expiradas: {expirados}\n"
-        msg += f"📦 Total: {total}"
-        bot.send_message(message.chat.id, msg)
+        msg = (
+            f"📊 *Estadísticas del sistema:*\n\n"
+            f"✅ Activas: {activos}\n"
+            f"⛔️ Expiradas: {expirados}\n"
+            f"📦 Total: {total}"
+        )
+        bot.send_message(message.chat.id, msg, parse_mode="Markdown")
 
     @bot.message_handler(func=lambda m: m.text == '➕ Crear configuración')
-    def crear_config(message):
-        msg = bot.send_message(message.chat.id, "🧑‍💻 Escribe el *nombre del cliente*:", reply_markup=ReplyKeyboardRemove(), parse_mode="Markdown")
-        bot.register_next_step_handler(msg, solicitar_plan)
+    def iniciar_creacion(message):
+        bot.send_message(message.chat.id, "✍️ *Escribe el nombre del cliente*:", 
+                         parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+        bot.register_next_step_handler(message, solicitar_plan)
 
     def solicitar_plan(message):
-        TEMP[message.chat.id] = {'cliente': message.text}
-        kb = ReplyKeyboardMarkup(resize_keyboard=True)
-        for plan in PLANS.keys():
-            kb.add(plan)
-        msg = bot.send_message(message.chat.id, "📦 Elige un *plan de duración*:", reply_markup=kb, parse_mode="Markdown")
-        bot.register_next_step_handler(msg, confirmar_creacion)
+        cliente = message.text.strip()
+        TEMP[message.chat.id] = {'cliente': cliente}
+        kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        for plan in PLANS:
+            kb.add(KeyboardButton(plan))
+        kb.add(KeyboardButton('🔙 Volver'))
+        bot.send_message(message.chat.id, "📦 *Selecciona un plan de duración*:", 
+                         parse_mode="Markdown", reply_markup=kb)
+        bot.register_next_step_handler(message, confirmar_creacion)
 
     def confirmar_creacion(message):
-        user_data = TEMP.get(message.chat.id, {})
-        cliente = user_data.get('cliente')
+        if message.text == '🔙 Volver':
+            TEMP.pop(message.chat.id, None)
+            return bot.send_message(message.chat.id, "↩️ Regresando al menú principal.", 
+                                     reply_markup=admin_menu())
+        data = TEMP.get(message.chat.id, {})
+        cliente = data.get('cliente')
         plan = message.text
         if plan not in PLANS:
-            return bot.send_message(message.chat.id, "❌ Plan inválido. Intenta nuevamente.", reply_markup=admin_menu())
-        dias = PLANS[plan]
-        vencimiento = datetime.now() + timedelta(days=dias)
-        success, path, qr_path = create_config(cliente, vencimiento)
+            return bot.send_message(message.chat.id, "❌ Plan inválido, intenta de nuevo.", 
+                                    reply_markup=admin_menu())
+        # calculate expiration
+        delta = PLANS[plan]
+        venc = datetime.now() + timedelta(**delta)
+        success, conf_path, qr_path = create_config(cliente, venc)
         if not success:
-            return bot.send_message(message.chat.id, f"❌ Error al crear: {path}", reply_markup=admin_menu())
-        msg = f"✅ Cliente *{cliente}* creado.\n"
-        msg += f"📅 Vence el: *{vencimiento.strftime('%d/%m/%Y')}*"
+            return bot.send_message(message.chat.id, f"❌ Error: {conf_path}", reply_markup=admin_menu())
+        caption = (
+            f"✅ *{cliente}* creado.\n"
+            f"📅 Vence el: *{venc.strftime('%d/%m/%Y %H:%M')}*"
+        )
+        # send files
+        with open(conf_path, 'rb') as f:
+            bot.send_document(message.chat.id, f, caption=caption, parse_mode="Markdown")
         with open(qr_path, 'rb') as qr:
-            bot.send_photo(message.chat.id, qr, caption=msg, parse_mode="Markdown")
+            bot.send_photo(message.chat.id, qr)
         TEMP.pop(message.chat.id, None)
+        bot.send_message(message.chat.id, "↩️ Regresando al menú principal.", reply_markup=admin_menu())
 
     @bot.message_handler(func=lambda m: m.text == '🗂 Ver todas')
     def ver_todas(message):
         datos = load_json(CONFIGS_FILE)
         if not datos:
-            return bot.send_message(message.chat.id, "📂 No hay configuraciones registradas.")
-        msg = "📁 Configuraciones registradas:\n\n"
-        for cliente, info in datos.items():
-            estado = "✅ Activa" if info['activa'] else "⛔ Expirada"
-            msg += f"👤 {cliente} — {estado}\n"
-        bot.send_message(message.chat.id, msg)
+            return bot.send_message(message.chat.id, "ℹ️ No hay configuraciones registradas.")
+        lines = ["📁 *Configuraciones registradas:*"]
+        for cli, info in datos.items():
+            estado = "✅ Activa" if info['activa'] else "⛔️ Expirada"
+            lines.append(f"• {cli}: {estado} — vence {info['vencimiento']}")
+        bot.send_message(message.chat.id, "\n".join(lines), parse_mode="Markdown")
 
     @bot.message_handler(func=lambda m: m.text == '📆 Por expirar')
     def por_expirar(message):
         datos = load_json(CONFIGS_FILE)
-        ahora = datetime.now()
         proximas = []
-        for cliente, info in datos.items():
-            vencimiento = datetime.strptime(info['vencimiento'], "%Y-%m-%d")
-            dias = (vencimiento - ahora).days
+        hoy = datetime.now()
+        for cli, info in datos.items():
+            vendt = datetime.strptime(info['vencimiento'], "%Y-%m-%d %H:%M:%S")
+            dias = (vendt - hoy).days
             if 0 <= dias <= 3:
-                proximas.append((cliente, dias))
+                proximas.append((cli, dias))
         if not proximas:
-            return bot.send_message(message.chat.id, "✅ No hay configuraciones por expirar pronto.")
-        msg = "📆 Configuraciones próximas a expirar:\n\n"
-        for cliente, dias in proximas:
-            msg += f"👤 {cliente} — vence en {dias} día(s)\n"
-        bot.send_message(message.chat.id, msg)
+            return bot.send_message(message.chat.id, "✅ No hay configuraciones próximas a expirar.")
+        lines = ["📆 *Por expirar en los próximos 3 días:*"]
+        for cli, dias in proximas:
+            lines.append(f"• {cli}: vence en {dias} día(s)")
+        bot.send_message(message.chat.id, "\n".join(lines), parse_mode="Markdown")
 
     @bot.message_handler(func=lambda m: m.text == '📁 Ver QR')
     def ver_qr(message):
-        msg = bot.send_message(message.chat.id, "✏️ Escribe el *nombre del cliente* para ver el QR:", parse_mode="Markdown")
-        bot.register_next_step_handler(msg, enviar_qr)
+        bot.send_message(message.chat.id, "✏️ *Nombre del cliente* para ver QR:", 
+                         parse_mode="Markdown")
+        bot.register_next_step_handler(message, enviar_qr)
 
     def enviar_qr(message):
-        cliente = message.text
+        cliente = message.text.strip()
         path = f"data/clientes/{cliente}.png"
         if not os.path.exists(path):
-            return bot.send_message(message.chat.id, "❌ No se encontró el archivo QR.")
+            return bot.send_message(message.chat.id, "❌ QR no encontrado.")
         with open(path, 'rb') as qr:
-            bot.send_photo(message.chat.id, qr, caption=f"📸 Código QR de *{cliente}*", parse_mode="Markdown")
+            bot.send_photo(message.chat.id, qr, caption=f"📸 QR de *{cliente}*", parse_mode="Markdown")
 
     @bot.message_handler(func=lambda m: m.text == '📄 Descargar .conf')
     def ver_conf(message):
-        msg = bot.send_message(message.chat.id, "✏️ Escribe el *nombre del cliente* para obtener el .conf:", parse_mode="Markdown")
-        bot.register_next_step_handler(msg, enviar_conf)
+        bot.send_message(message.chat.id, "✏️ *Nombre del cliente* para .conf:", parse_mode="Markdown")
+        bot.register_next_step_handler(message, enviar_conf)
 
     def enviar_conf(message):
-        cliente = message.text
+        cliente = message.text.strip()
         path = f"data/clientes/{cliente}.conf"
         if not os.path.exists(path):
-            return bot.send_message(message.chat.id, "❌ No se encontró el archivo .conf.")
+            return bot.send_message(message.chat.id, "❌ .conf no encontrado.")
         with open(path, 'rb') as conf:
-            bot.send_document(message.chat.id, conf, caption=f"📄 Archivo de configuración de *{cliente}*", parse_mode="Markdown")
+            bot.send_document(message.chat.id, conf, caption=f"📄 *{cliente}*", parse_mode="Markdown")
 
     @bot.message_handler(func=lambda m: m.text == '♻️ Renovar')
     def renovar(message):
-        msg = bot.send_message(message.chat.id, "✏️ Escribe el *nombre del cliente* a renovar:", parse_mode="Markdown")
-        bot.register_next_step_handler(msg, ejecutar_renovacion)
+        bot.send_message(message.chat.id, "✏️ *Nombre del cliente* a renovar:", parse_mode="Markdown")
+        bot.register_next_step_handler(message, ejecutar_renovacion)
 
     def ejecutar_renovacion(message):
-        cliente = message.text
-        exito, nuevo_vencimiento = renew_config(cliente)
+        cliente = message.text.strip()
+        exito, nuevo = renew_config(cliente)
         if exito:
-            return bot.send_message(message.chat.id, f"♻️ *{cliente}* renovado hasta {nuevo_vencimiento.strftime('%d/%m/%Y')}", parse_mode="Markdown")
+            bot.send_message(message.chat.id, f"♻️ *{cliente}* renovado hasta {nuevo.strftime('%d/%m/%Y')}", parse_mode="Markdown")
         else:
-            return bot.send_message(message.chat.id, "❌ No se pudo renovar. Verifica el nombre.")
+            bot.send_message(message.chat.id, "❌ No se pudo renovar. Verifica el nombre.")
 
     @bot.message_handler(func=lambda m: m.text == '❌ Eliminar')
     def eliminar(message):
-        msg = bot.send_message(message.chat.id, "🗑 Escribe el *nombre del cliente* a eliminar:", parse_mode="Markdown")
-        bot.register_next_step_handler(msg, ejecutar_eliminacion)
+        bot.send_message(message.chat.id, "✏️ *Nombre del cliente* a eliminar:", parse_mode="Markdown")
+        bot.register_next_step_handler(message, ejecutar_eliminacion)
 
     def ejecutar_eliminacion(message):
-        cliente = message.text
+        cliente = message.text.strip()
         if delete_config(cliente):
-            return bot.send_message(message.chat.id, f"🗑 *{cliente}* eliminado correctamente.", parse_mode="Markdown")
+            bot.send_message(message.chat.id, f"🗑️ *{cliente}* eliminado.", parse_mode="Markdown")
         else:
-            return bot.send_message(message.chat.id, "❌ No se pudo eliminar. Verifica el nombre.")
+            bot.send_message(message.chat.id, "❌ No se pudo eliminar. Verifica el nombre.")
