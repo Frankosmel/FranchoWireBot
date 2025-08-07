@@ -5,9 +5,9 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemo
 
 from config import ADMIN_ID, PLANS
 from storage import load_json, save_json
-from utils import generate_qr, renew_config, delete_config, get_stats
+from utils import generate_qr, renew_config, delete_config, get_stats, calcular_nuevo_vencimiento
 from generator import create_config
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 
 CONFIGS_FILE = os.path.join('data', 'configuraciones.json')
@@ -35,7 +35,6 @@ def gestion_menu():
     )
     return kb
 
-# Almacenaje temporal para flujos multipaso
 TEMP = {}
 
 def register_admin_handlers(bot: TeleBot):
@@ -46,16 +45,15 @@ def register_admin_handlers(bot: TeleBot):
             return bot.send_message(message.chat.id, "⛔️ Acceso restringido.")
         text = (
             "👋 *Bienvenido al Panel de Administración de Francho Wire Bot*\n\n"
-            "Con este bot podrás gestionar tus clientes WireGuard de manera sencilla:\n"
-            "• ➕ Crear configuración: Genera archivos .conf y códigos QR.\n"
-            "• 🛠 Gestionar configuraciones: Ver, renovar o eliminar configuraciones.\n"
-            "• 📊 Estadísticas: Consulta cuántos clientes están activos o expirados.\n"
-            "• 🔙 Volver: Regresa al menú principal en cualquier momento.\n\n"
-            "Selecciona una opción para comenzar."
+            "Gestiona fácilmente tus clientes WireGuard:\n"
+            "• ➕ Crear configuración\n"
+            "• 🛠 Gestionar configuraciones\n"
+            "• 📊 Estadísticas\n"
+            "• 🔙 Volver\n\n"
+            "Selecciona una opción."
         )
         bot.send_message(
-            message.chat.id,
-            text,
+            message.chat.id, text,
             parse_mode="Markdown",
             reply_markup=admin_menu()
         )
@@ -92,8 +90,7 @@ def register_admin_handlers(bot: TeleBot):
         bot.register_next_step_handler(message, solicitar_plan)
 
     def solicitar_plan(message):
-        cliente = message.text.strip()
-        TEMP[message.chat.id] = {'cliente': cliente}
+        TEMP[message.chat.id] = {'cliente': message.text.strip()}
         kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
         for plan in PLANS:
             kb.add(KeyboardButton(plan))
@@ -123,8 +120,7 @@ def register_admin_handlers(bot: TeleBot):
                 "❌ Plan inválido, intenta de nuevo.",
                 reply_markup=admin_menu()
             )
-        delta = PLANS[plan]
-        venc = datetime.now() + timedelta(**delta)
+        venc = calcular_nuevo_vencimiento(plan)
         success, conf_path, qr_path = create_config(cliente, venc)
         if not success:
             return bot.send_message(
@@ -151,7 +147,7 @@ def register_admin_handlers(bot: TeleBot):
     def ver_todas(message):
         datos = load_json(CONFIGS_FILE)
         if not datos:
-            return bot.send_message(message.chat.id, "ℹ️ No hay configuraciones registradas.")
+            return bot.send_message(message.chat.id, "ℹ️ No hay configuraciones.")
         lines = ["📁 *Configuraciones registradas:*"]
         for cli, info in datos.items():
             estado = "✅ Activa" if info['activa'] else "⛔️ Expirada"
@@ -162,15 +158,15 @@ def register_admin_handlers(bot: TeleBot):
     def por_expirar(message):
         datos = load_json(CONFIGS_FILE)
         proximas = []
-        hoy = datetime.now()
+        ahora = datetime.now()
         for cli, info in datos.items():
             vendt = datetime.strptime(info['vencimiento'], "%Y-%m-%d %H:%M:%S")
-            dias = (vendt - hoy).days
+            dias = (vendt - ahora).days
             if 0 <= dias <= 3:
                 proximas.append((cli, dias))
         if not proximas:
-            return bot.send_message(message.chat.id, "✅ No hay configuraciones próximas a expirar.")
-        lines = ["📆 *Por expirar en los próximos 3 días:*"]
+            return bot.send_message(message.chat.id, "✅ No hay próximas a expirar.")
+        lines = ["📆 *Por expirar en próximos 3 días:*"]
         for cli, dias in proximas:
             lines.append(f"• {cli}: vence en {dias} día(s)")
         bot.send_message(message.chat.id, "\n".join(lines), parse_mode="Markdown")
@@ -228,7 +224,7 @@ def register_admin_handlers(bot: TeleBot):
                 parse_mode="Markdown"
             )
         else:
-            bot.send_message(message.chat.id, "❌ No se pudo renovar. Verifica el nombre.")
+            bot.send_message(message.chat.id, "❌ No se pudo renovar.")
 
     @bot.message_handler(func=lambda m: m.text == '❌ Eliminar')
     def eliminar(message):
@@ -248,4 +244,4 @@ def register_admin_handlers(bot: TeleBot):
                 parse_mode="Markdown"
             )
         else:
-            bot.send_message(message.chat.id, "❌ No se pudo eliminar. Verifica el nombre.")
+            bot.send_message(message.chat.id, "❌ No se pudo eliminar.")
