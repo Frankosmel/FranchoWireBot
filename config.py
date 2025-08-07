@@ -13,6 +13,7 @@ CLIENTES_DIR   = CLIENTS_DIR                                      # alias españ
 WG_INTERFACE        = 'wg0'
 WG_CONFIG_DIR       = f'/etc/wireguard/configs'                   # donde guarda wg-quick sus .conf
 WG_PORT             = 51820
+IP_RANGO_INICIO = '10.9.0.2'
 SERVER_PUBLIC_IP    = '3.145.41.118'
 SERVER_PUBLIC_KEY   = '/etc/wireguard/server_public.key'          # ruta a tu clave pública
 SERVER_ENDPOINT     = f'{SERVER_PUBLIC_IP}:{WG_PORT}'
