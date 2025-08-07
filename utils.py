@@ -8,11 +8,6 @@ from datetime import datetime, timedelta
 from config import (
     WG_CONFIG_DIR,
     CLIENTS_DIR,
-    SERVER_PUBLIC_KEY,
-    SERVER_ENDPOINT,
-    WG_PORT,
-    LISTEN_PORT,
-    WG_NETWORK_RANGE,
     PLANS
 )
 
@@ -29,6 +24,7 @@ def ruta_qr_cliente(nombre: str) -> str:
     """Devuelve la ruta absoluta del .png QR de un cliente."""
     return os.path.join(CLIENTS_DIR, f"{nombre}.png")
 
+
 # ========================= VENCIMIENTOS =========================
 
 def calcular_nuevo_vencimiento(plan: str) -> datetime:
@@ -36,10 +32,11 @@ def calcular_nuevo_vencimiento(plan: str) -> datetime:
     Calcula la nueva fecha de vencimiento según el plan elegido.
     Planes definidos en config.PLANS con claves 'dias' o 'horas'.
     """
-    delta = PLANS[plan]
+    delta = PLANS.get(plan, {})
     dias = delta.get('dias', 0)
     horas = delta.get('horas', 0)
     return datetime.now() + timedelta(days=dias, hours=horas)
+
 
 # ========================= QR =========================
 
@@ -53,9 +50,10 @@ def generate_qr(ruta_conf: str) -> str:
     with open(ruta_conf, 'r') as f:
         contenido = f.read()
     img = qrcode.make(contenido)
-    qr_path = ruta_conf.replace('.conf', '.png')
+    qr_path = ruta_qr_cliente(os.path.splitext(os.path.basename(ruta_conf))[0])
     img.save(qr_path)
     return qr_path
+
 
 # ========================= ESTADÍSTICAS =========================
 
@@ -78,6 +76,7 @@ def get_stats() -> (int, int):
             expirados += 1
     return activos, expirados
 
+
 # ========================= RENOVACIÓN =========================
 
 def renew_config(nombre: str) -> (bool, datetime):
@@ -91,12 +90,12 @@ def renew_config(nombre: str) -> (bool, datetime):
         data = json.load(f)
     if nombre not in data:
         return False, None
-    plan = data[nombre]['plan']
-    nueva_fecha = calcular_nuevo_vencimiento(plan)
+    nueva_fecha = calcular_nuevo_vencimiento(data[nombre]['plan'])
     data[nombre]['vencimiento'] = nueva_fecha.strftime("%Y-%m-%d %H:%M")
     with open(CONFIGS_FILE, 'w') as f:
         json.dump(data, f, indent=2)
     return True, nueva_fecha
+
 
 # ========================= ELIMINACIÓN =========================
 
