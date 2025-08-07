@@ -12,7 +12,7 @@ CLIENT_NAME="$1"
 # Rutas
 WG_DIR="/etc/wireguard"
 SERVER_PUBLIC_KEY_PATH="$WG_DIR/server_public.key"  # ← Corregido
-SERVER_IP="your.public.ip.address"  # Reemplaza esto con tu IP pública
+SERVER_IP="3.145.41.118"  # Reemplaza esto con tu IP pública
 CLIENTS_DIR="/home/ubuntu/francho_wire/clientes"
 CONF_DIR="$CLIENTS_DIR"
 QR_DIR="$CLIENTS_DIR"
