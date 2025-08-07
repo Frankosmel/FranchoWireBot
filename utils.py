@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 from config import (
     WG_CONFIG_DIR,
-    CLIENTES_DIR,
+    CLIENTS_DIR,            # Ajustado al nombre definido en config.py
     IP_RANGO_INICIO,
     IP_RANGO_FIN,
     SERVER_PUBLIC_IP,
@@ -41,7 +41,7 @@ def cargar_cliente(nombre: str):
     """
     Carga los datos del cliente desde su archivo JSON.
     """
-    ruta = os.path.join(CLIENTES_DIR, f"{nombre}.json")
+    ruta = os.path.join(CLIENTS_DIR, f"{nombre}.json")
     if not os.path.exists(ruta):
         return None
     with open(ruta, "r") as f:
@@ -53,9 +53,9 @@ def obtener_ips_asignadas():
     Devuelve una lista de todas las IPs asignadas actualmente a los clientes.
     """
     ips = []
-    for archivo in os.listdir(CLIENTES_DIR):
+    for archivo in os.listdir(CLIENTS_DIR):
         if archivo.endswith(".json"):
-            ruta = os.path.join(CLIENTES_DIR, archivo)
+            ruta = os.path.join(CLIENTS_DIR, archivo)
             with open(ruta, "r") as f:
                 data = json.load(f)
                 ip = data.get("ip")
@@ -72,8 +72,8 @@ def asignar_ip_disponible():
     inicio = ipaddress.IPv4Address(IP_RANGO_INICIO)
     fin = ipaddress.IPv4Address(IP_RANGO_FIN)
 
-    for ip in range(int(inicio), int(fin)):
-        ip_str = str(ipaddress.IPv4Address(ip))
+    for ip_int in range(int(inicio), int(fin) + 1):
+        ip_str = str(ipaddress.IPv4Address(ip_int))
         if ip_str not in usadas:
             return ip_str
     raise RuntimeError("❌ No hay IPs disponibles en el rango definido.")
@@ -84,6 +84,7 @@ def asignar_ip_disponible():
 def generar_qr_desde_conf(ruta_archivo: str):
     """
     Genera un código QR desde el contenido de un archivo .conf.
+    Devuelve un objeto BytesIO con la imagen PNG.
     """
     if not os.path.exists(ruta_archivo):
         return None
