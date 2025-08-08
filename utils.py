@@ -116,3 +116,34 @@ def delete_config(nombre: str) -> bool:
         removed = True
 
     return removed
+    # --- utils.py (añadir al final) ---
+import json
+import os
+from datetime import datetime
+
+# Asegúrate de tener arriba:
+# CONFIGS_FILE = os.path.join(CLIENTS_DIR, 'configuraciones.json')
+
+def registrar_config(cliente: str, plan: str, vencimiento: datetime) -> None:
+    """
+    Registra/actualiza una configuración en CLIENTS_DIR/configuraciones.json
+    sin tocar el resto de utilidades.
+    """
+    os.makedirs(CLIENTS_DIR, exist_ok=True)
+
+    datos = {}
+    if os.path.isfile(CONFIGS_FILE):
+        try:
+            with open(CONFIGS_FILE, 'r') as f:
+                datos = json.load(f) or {}
+        except json.JSONDecodeError:
+            datos = {}
+
+    datos[cliente] = {
+        "plan": plan,
+        "vencimiento": vencimiento.strftime("%Y-%m-%d %H:%M"),
+        "activa": True
+    }
+
+    with open(CONFIGS_FILE, 'w') as f:
+        json.dump(datos, f, indent=2)
