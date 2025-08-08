@@ -14,6 +14,7 @@ from config import (
 )
 from storage import load_json  # para leer configuraciones
 from admin_handlers import register_admin_handlers  # tus handlers de admin
+from payments_handlers import register_payments_handlers  # ⬅️ agrega /planes y flujo de pagos
 
 # Ruta al JSON donde guardas tus metadatos de clientes
 CONFIGS_FILE = os.path.join(CLIENTS_DIR, "configuraciones.json")
@@ -65,6 +66,10 @@ if __name__ == '__main__':
     watcher_thread = threading.Thread(target=expiration_watcher, daemon=True)
     watcher_thread.start()
 
-    # Registra tus handlers de admin y arranca el bot
+    # Registra tus handlers
     register_admin_handlers(bot)
+    register_payments_handlers(bot)  # ⬅️ habilita /planes y el flujo de compra
+
+    # Iniciar el polling infinito para escuchar mensajes
     bot.infinity_polling()
+```0
