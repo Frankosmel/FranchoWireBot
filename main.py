@@ -72,4 +72,3 @@ if __name__ == '__main__':
 
     # Iniciar el polling infinito para escuchar mensajes
     bot.infinity_polling()
-```0
