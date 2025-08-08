@@ -84,4 +84,3 @@ def create_config(cliente: str, plan: str, vencimiento: datetime):
     except Exception as e:
         # Cualquier otra excepción no controlada
         return False, f"Excepción no controlada en create_config: {e}", None
-```0
