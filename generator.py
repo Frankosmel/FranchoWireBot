@@ -1,5 +1,13 @@
-# generator.py  ✅ Corregido para usar la MISMA ruta de JSON y la
-#                función registrar_config de utils.py
+# generator.py
+#
+# Generador de configuraciones WireGuard para clientes.
+# - Ejecuta el script bash declarado en config.SCRIPT_PATH para crear el .conf
+# - Genera el código QR si no existe
+# - Registra/actualiza la metadata de la configuración en configuraciones.json
+#
+# Retorno de create_config(cliente, plan, vencimiento):
+#   (True, ruta_conf, ruta_qr)    en éxito
+#   (False, mensaje_error, None)  en error
 
 import os
 import subprocess
@@ -10,46 +18,70 @@ from utils import (
     ruta_conf_cliente,
     ruta_qr_cliente,
     generate_qr,
-    registrar_config          # ← nuevo: guardamos todo en un solo sitio
+    registrar_config,  # Debe existir en utils.py
 )
+
 
 def create_config(cliente: str, plan: str, vencimiento: datetime):
     """
-    Crea una nueva configuración WireGuard:
+    Crea una configuración WireGuard para un cliente.
 
-    • Ejecuta el script bash (SCRIPT_PATH) → genera .conf
-    • Genera el QR si falta.
-    • Registra la entrada en *data/configuraciones.json* mediante utils.registrar_config
+    Pasos:
+      1) Ejecuta el script bash (SCRIPT_PATH) que debe generar el archivo .conf
+      2) Comprueba la existencia del .conf y genera el QR si no existe
+      3) Registra la configuración (plan, vencimiento, activa) en configuraciones.json
 
-    Retorna:
-        (True, ruta_conf, ruta_qr)    en éxito
-        (False, mensaje_error, None)  en error
+    Args:
+        cliente (str): nombre/identificador del cliente (se usa para el nombre de archivo)
+        plan (str): nombre del plan seleccionado (debe existir en config.PLANS)
+        vencimiento (datetime): fecha/hora exacta de vencimiento
+
+    Returns:
+        tuple:
+            (True, conf_path, qr_path)              si todo salió bien
+            (False, mensaje_error, None)            si hubo error
     """
+    try:
+        # Asegurar carpeta de clientes
+        os.makedirs(CLIENTS_DIR, exist_ok=True)
 
-    # 1️⃣  Ejecutar el script bash
-    result = subprocess.run(
-        ["sudo", "bash", SCRIPT_PATH, cliente],
-        capture_output=True,
-        text=True
-    )
-    if result.returncode != 0:
-        return False, result.stderr.strip(), None
+        # 1) Ejecutar el script que crea la configuración del cliente
+        #    El script debe aceptar como argumento el nombre del cliente
+        #    y generar el archivo: {CLIENTS_DIR}/{cliente}.conf
+        result = subprocess.run(
+            ["sudo", "bash", SCRIPT_PATH, cliente],
+            capture_output=True,
+            text=True
+        )
 
-    # 2️⃣  Verificar rutas generadas
-    conf_path = ruta_conf_cliente(cliente)
-    qr_path   = ruta_qr_cliente(cliente)
+        if result.returncode != 0:
+            # stderr suele contener el motivo del fallo
+            return False, (result.stderr or "Error desconocido al ejecutar el script"), None
 
-    if not os.path.isfile(conf_path):
-        return False, f"No se encontró {conf_path}", None
+        # 2) Verificar rutas generadas por el script
+        conf_path = ruta_conf_cliente(cliente)
+        qr_path = ruta_qr_cliente(cliente)
 
-    # 3️⃣  Generar QR si aún no existe
-    if not os.path.isfile(qr_path):
+        if not os.path.isfile(conf_path):
+            return False, f"No se encontró el archivo de configuración: {conf_path}", None
+
+        # Generar QR si aún no existe
+        if not os.path.isfile(qr_path):
+            try:
+                generate_qr(conf_path)  # genera el PNG a partir del .conf
+            except Exception as e:
+                return False, f"Error al generar el QR: {e}", None
+
+        # 3) Registrar/actualizar en configuraciones.json (fuente de verdad)
         try:
-            generate_qr(conf_path)
+            registrar_config(cliente, plan, vencimiento)
         except Exception as e:
-            return False, f"Error al generar QR: {e}", None
+            return False, f"Error al registrar la configuración en JSON: {e}", None
 
-    # 4️⃣  Registrar en configuraciones.json (una sola fuente de verdad)
-    registrar_config(cliente, plan, vencimiento)
+        # Éxito
+        return True, conf_path, qr_path
 
-    return True, conf_path, qr_path
+    except Exception as e:
+        # Cualquier otra excepción no controlada
+        return False, f"Excepción no controlada en create_config: {e}", None
+```0
