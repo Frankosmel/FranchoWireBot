@@ -2,6 +2,7 @@
 
 import os
 import re
+import json
 from datetime import datetime
 from telebot import TeleBot
 from telebot.types import (
@@ -17,23 +18,27 @@ from utils import calcular_nuevo_vencimiento
 # =========================
 # Config de pagos
 # =========================
-SALDO_NUMBER = "56246700"                      # Enviar saldo a este número (no pedir confirmación)
-CUP_CARD     = "9204 1299 7691 8161"          # Tarjeta CUP
-# NOTA: para Transfermóvil (CUP) SÍ pedimos "número de confirmación" después de la captura
+SALDO_NUMBER = "56246700"               # Enviar saldo a este número (NO pedir confirmación aquí)
+CUP_CARD     = "9204 1299 7691 8161"    # Tarjeta CUP (Transfermóvil) — aquí SÍ pedimos # de confirmación
+
+# JSON central de configs
+CONFIGS_FILE = os.path.join(CLIENTS_DIR, 'configuraciones.json')
 
 # =========================
 # Estado temporal de compras
 # =========================
-# Estructura:
 # PENDIENTES[user_id] = {
 #   'plan': <str>,
 #   'metodo': 'saldo' | 'cup',
 #   'receipt_file_id': <str|None>,
 #   'confirmacion': <str|None>,
+#   'user_first_name': <str|None>
 # }
 PENDIENTES = {}
 
-# Helpers
+# =========================
+# Helpers de UI
+# =========================
 def _kb_planes() -> ReplyKeyboardMarkup:
     kb = ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     for p in PLANS.keys():
@@ -47,56 +52,74 @@ def _kb_metodos() -> ReplyKeyboardMarkup:
     kb.add(KeyboardButton('🔙 Cancelar'))
     return kb
 
+def _inline_cancel(uid: int) -> InlineKeyboardMarkup:
+    m = InlineKeyboardMarkup()
+    m.add(InlineKeyboardButton("🛑 Cancelar compra", callback_data=f"pago_cancelar:{uid}"))
+    return m
+
 def _sanitize_name(s: str) -> str:
-    # nombre de cliente seguro para archivo
     return re.sub(r'[^a-zA-Z0-9_\-]', '_', s)[:40] or 'cliente'
 
+def _ensure_configs_json():
+    folder = os.path.dirname(CONFIGS_FILE)
+    if folder and not os.path.isdir(folder):
+        os.makedirs(folder, exist_ok=True)
+    if not os.path.isfile(CONFIGS_FILE):
+        with open(CONFIGS_FILE, 'w') as f:
+            json.dump({}, f, indent=2)
+
+# =========================
+# Registro de handlers
+# =========================
 def register_payments_handlers(bot: TeleBot):
 
-    # =========================
-    # /planes — inicio del flujo de compra
-    # =========================
+    # /planes — inicio
     @bot.message_handler(commands=['planes'])
     def planes_cmd(message: Message):
         user_id = message.from_user.id
         PENDIENTES.pop(user_id, None)  # limpiar cualquier estado anterior
+        PENDIENTES[user_id] = {'user_first_name': message.from_user.first_name or ''}
         bot.send_message(
             message.chat.id,
             "🗂 *Planes disponibles*\n\n"
-            "• Free (5 horas)\n"
-            "• 15 días\n"
-            "• 30 días\n\n"
-            "Elige un plan:",
+            "🔹 Free (5 horas)\n"
+            "🔹 15 días\n"
+            "🔹 30 días\n\n"
+            "👉 Elige un plan para continuar:",
             parse_mode="Markdown",
             reply_markup=_kb_planes()
         )
+        # botón inline de cancelación
+        bot.send_message(message.chat.id, "Si cambiaste de idea, puedes cancelar aquí:", reply_markup=_inline_cancel(user_id))
 
-    # =========================
     # Selección de plan
-    # =========================
     @bot.message_handler(func=lambda m: m.text in list(PLANS.keys()) + ['🔙 Cancelar'])
     def seleccionar_plan(message: Message):
+        user_id = message.from_user.id
+
         if message.text == '🔙 Cancelar':
-            PENDIENTES.pop(message.from_user.id, None)
+            PENDIENTES.pop(user_id, None)
             return bot.send_message(message.chat.id, "✅ Operación cancelada.", reply_markup=ReplyKeyboardRemove())
 
-        user_id = message.from_user.id
-        PENDIENTES[user_id] = {
-            'plan': message.text,
-            'metodo': None,
-            'receipt_file_id': None,
-            'confirmacion': None
-        }
+        if user_id not in PENDIENTES:
+            PENDIENTES[user_id] = {}
+        PENDIENTES[user_id]['plan'] = message.text
+        PENDIENTES[user_id]['metodo'] = None
+        PENDIENTES[user_id]['receipt_file_id'] = None
+        PENDIENTES[user_id]['confirmacion'] = None
+        PENDIENTES[user_id]['user_first_name'] = message.from_user.first_name or PENDIENTES[user_id].get('user_first_name', '')
+
         bot.send_message(
             message.chat.id,
-            "💰 *Selecciona un método de pago:*",
+            "💳 *Selecciona un método de pago:*\n\n"
+            "• 💳 *Saldo* → Envía saldo al número indicado y luego manda la *captura* aquí.\n"
+            "• 🏦 *Transferencia CUP* → Envía a la tarjeta y luego manda *captura* + *número de confirmación*.",
             parse_mode="Markdown",
             reply_markup=_kb_metodos()
         )
+        bot.send_message(message.chat.id, "Puedes cancelar en cualquier momento:", reply_markup=_inline_cancel(user_id))
 
-    # =========================
-    # Selección de método de pago
-    # =========================
+    # Selección de método
     @bot.message_handler(func=lambda m: m.text in ['💳 Saldo', '🏦 Transferencia CUP'])
     def seleccionar_metodo(message: Message):
         user_id = message.from_user.id
@@ -107,31 +130,29 @@ def register_payments_handlers(bot: TeleBot):
         PENDIENTES[user_id]['metodo'] = metodo
 
         if metodo == 'saldo':
-            # NO pedir número de confirmación aquí
             bot.send_message(
                 message.chat.id,
                 f"💳 *Pago por Saldo*\n\n"
-                f"1) Envía saldo a: *{SALDO_NUMBER}*\n"
+                f"1) Envía saldo a: *{SALDO_NUMBER}*.\n"
                 f"2) Envía aquí la *captura del comprobante*.\n\n"
-                f"Cuando la capture sea revisada y aprobada por el administrador, recibirás tu archivo y QR.",
+                f"🕒 El administrador revisará tu pago y, si todo está bien, recibirás tu archivo y QR automáticamente.",
                 parse_mode="Markdown",
                 reply_markup=ReplyKeyboardRemove()
             )
         else:
             bot.send_message(
                 message.chat.id,
-                f"🏦 *Transferencia CUP*\n\n"
-                f"1) Envía CUP a la tarjeta:\n*{CUP_CARD}*\n"
+                f"🏦 *Transferencia CUP (Transfermóvil)*\n\n"
+                f"1) Envía CUP a la tarjeta: *{CUP_CARD}*.\n"
                 f"2) Envía aquí la *captura del comprobante*.\n"
                 f"3) Luego te pediré el *número de confirmación* de Transfermóvil.\n\n"
-                f"Cuando el admin apruebe, recibirás tu archivo y QR.",
+                f"🕒 El administrador revisará tu pago y, si todo está bien, recibirás tu archivo y QR automáticamente.",
                 parse_mode="Markdown",
                 reply_markup=ReplyKeyboardRemove()
             )
+        bot.send_message(message.chat.id, "Si te equivocaste, cancela aquí:", reply_markup=_inline_cancel(user_id))
 
-    # =========================
-    # Recibo (foto) del cliente
-    # =========================
+    # Recibir captura
     @bot.message_handler(content_types=['photo'])
     def recibir_captura(message: Message):
         user_id = message.from_user.id
@@ -142,30 +163,47 @@ def register_payments_handlers(bot: TeleBot):
         PENDIENTES[user_id]['receipt_file_id'] = file_id
 
         if PENDIENTES[user_id]['metodo'] == 'cup':
-            # pedir número de confirmación
-            bot.send_message(
+            # pedir confirmación TM
+            return bot.send_message(
                 message.chat.id,
                 "🔢 Envía ahora el *número de confirmación* de Transfermóvil:",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
+                reply_markup=_inline_cancel(user_id)
             )
-            # el próximo mensaje de texto se toma como confirmación
-            return
 
-        # Para SALDO, ya podemos enviar al admin sin pedir confirmación
+        # SALDO: enviar al admin directo
         _enviar_solicitud_al_admin(bot, message, require_confirm=False)
 
-    # =========================
     # Número de confirmación (solo CUP)
-    # =========================
-    @bot.message_handler(func=lambda m: m.text and m.from_user.id in PENDIENTES and PENDIENTES[m.from_user.id].get('metodo') == 'cup' and PENDIENTES[m.from_user.id].get('receipt_file_id') and not PENDIENTES[m.from_user.id].get('confirmacion'))
+    @bot.message_handler(func=lambda m: (
+        m.text
+        and m.from_user.id in PENDIENTES
+        and PENDIENTES[m.from_user.id].get('metodo') == 'cup'
+        and PENDIENTES[m.from_user.id].get('receipt_file_id')
+        and not PENDIENTES[m.from_user.id].get('confirmacion')
+    ))
     def recibir_confirmacion_cup(message: Message):
         user_id = message.from_user.id
         PENDIENTES[user_id]['confirmacion'] = message.text.strip()
         _enviar_solicitud_al_admin(bot, message, require_confirm=True)
 
-    # =========================
-    # Callbacks del admin (Aprobar / Rechazar)
-    # =========================
+    # Cancelación por inline button
+    @bot.callback_query_handler(func=lambda c: c.data.startswith('pago_cancelar:'))
+    def cancelar_cb(call: CallbackQuery):
+        try:
+            uid = int(call.data.split(':', 1)[1])
+        except ValueError:
+            return bot.answer_callback_query(call.id, "ID inválido.")
+
+        if call.from_user.id != uid:
+            return bot.answer_callback_query(call.id, "No puedes cancelar esta compra.")
+
+        PENDIENTES.pop(uid, None)
+        bot.answer_callback_query(call.id, "Compra cancelada.")
+        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        bot.send_message(uid, "🛑 Compra cancelada. Puedes comenzar de nuevo con /planes.")
+
+    # Admin: Aprobar / Rechazar
     @bot.callback_query_handler(func=lambda c: c.data.startswith('pago_aprobar:') or c.data.startswith('pago_rechazar:'))
     def callbacks_pago(call: CallbackQuery):
         if call.from_user.id != ADMIN_ID:
@@ -185,21 +223,47 @@ def register_payments_handlers(bot: TeleBot):
             bot.answer_callback_query(call.id, "Rechazado.")
             bot.send_message(uid, "❌ Tu pago fue *rechazado*. Revisa los datos e inténtalo otra vez.", parse_mode="Markdown")
             PENDIENTES.pop(uid, None)
+            try:
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+            except Exception:
+                pass
             return
 
-        # Aprobar
+        # === Aprobar ===
         plan = data['plan']
         venc = calcular_nuevo_vencimiento(plan)
+        buyer_name = data.get('user_first_name') or 'user'
+        safe_name = _sanitize_name(f"{buyer_name}_{uid}_{datetime.now().strftime('%m%d%H%M')}")
 
-        # nombre de cliente: user_<id>_<fecha>
-        # (puedes cambiar esto por un input previo si lo prefieres)
-        safe_name = _sanitize_name(f"{call.from_user.first_name or 'user'}_{uid}_{datetime.now().strftime('%m%d%H%M')}")
         ok, conf_path, qr_path = create_config(safe_name, venc)
         if not ok:
             bot.answer_callback_query(call.id, "Error al crear config.")
-            bot.send_message(uid, f"❌ Ocurrió un error al generar tu configuración:\n{conf_path}")
+            bot.send_message(uid, f"❌ Ocurrió un error al generar tu configuración:\n`{conf_path}`", parse_mode="Markdown")
             PENDIENTES.pop(uid, None)
+            try:
+                bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+            except Exception:
+                pass
             return
+
+        # Guardar el plan en configuraciones.json para que RENOVAR funcione
+        try:
+            _ensure_configs_json()
+            with open(CONFIGS_FILE, 'r') as f:
+                existing = json.load(f)
+        except Exception:
+            existing = {}
+        if safe_name not in existing:
+            existing[safe_name] = {}
+        existing[safe_name]['plan'] = plan
+        existing[safe_name]['vencimiento'] = venc.strftime("%Y-%m-%d %H:%M")
+        existing[safe_name]['activa'] = True
+        try:
+            with open(CONFIGS_FILE, 'w') as f:
+                json.dump(existing, f, indent=2)
+        except Exception as e:
+            # No es crítico para entregar el archivo
+            bot.send_message(ADMIN_ID, f"⚠️ No pude actualizar configuraciones.json: {e}")
 
         # Enviar al cliente
         caption = (
@@ -208,14 +272,27 @@ def register_payments_handlers(bot: TeleBot):
             f"👤 Cliente: *{safe_name}*\n"
             f"📅 Vence: *{venc.strftime('%d/%m/%Y %I:%M %p')}*"
         )
-        with open(conf_path, 'rb') as f:
-            bot.send_document(uid, f, caption=caption, parse_mode="Markdown")
+        try:
+            with open(conf_path, 'rb') as f:
+                bot.send_document(uid, f, caption=caption, parse_mode="Markdown")
+        except Exception as e:
+            bot.send_message(uid, f"⚠️ No pude adjuntar el archivo .conf automáticamente: `{e}`", parse_mode="Markdown")
+
         if os.path.exists(qr_path):
-            with open(qr_path, 'rb') as qrf:
-                bot.send_photo(uid, qrf, caption="📷 Escanéame para importar rápido.")
+            try:
+                with open(qr_path, 'rb') as qrf:
+                    bot.send_photo(uid, qrf, caption="📷 Escanéame para importar rápido.")
+            except Exception as e:
+                bot.send_message(uid, f"⚠️ No pude enviar el QR: `{e}`", parse_mode="Markdown")
+        else:
+            bot.send_message(uid, "⚠️ No se pudo generar el QR. Aún puedes importar el `.conf` manualmente.\n"
+                                  "Sugerencia al admin: instala `Pillow` en el entorno.", parse_mode="Markdown")
 
         bot.answer_callback_query(call.id, "Aprobado y enviado ✅")
-        bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        try:
+            bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        except Exception:
+            pass
         PENDIENTES.pop(uid, None)
 
 # =========================
@@ -247,7 +324,6 @@ def _enviar_solicitud_al_admin(bot: TeleBot, message: Message, require_confirm: 
     )
 
     try:
-        # enviar al admin
         bot.send_photo(
             ADMIN_ID,
             data['receipt_file_id'],
@@ -258,4 +334,8 @@ def _enviar_solicitud_al_admin(bot: TeleBot, message: Message, require_confirm: 
     except Exception as e:
         return bot.send_message(message.chat.id, f"❌ Error al enviar al admin: {e}")
 
-    bot.send_message(message.chat.id, "📨 Recibido. Tu pago está en *revisión*. Te avisamos pronto.", parse_mode="Markdown")
+    bot.send_message(
+        message.chat.id,
+        "📨 Recibido. Tu pago está en *revisión*. Te avisamos pronto.",
+        parse_mode="Markdown"
+        )
