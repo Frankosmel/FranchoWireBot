@@ -145,7 +145,7 @@ def register_admin_handlers(bot: TeleBot):
             return bot.send_message(message.chat.id, "❌ Plan inválido, intenta de nuevo.", reply_markup=admin_menu())
 
         venc = calcular_nuevo_vencimiento(plan)
-        success, conf_path, qr_path = create_config(cliente, venc)
+        success, conf_path, qr_path = create_config(cliente, plan, venc)
         if not success:
             return bot.send_message(message.chat.id, f"❌ Error: {conf_path}", reply_markup=admin_menu())
 
